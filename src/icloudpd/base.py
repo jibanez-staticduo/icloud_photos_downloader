@@ -275,7 +275,8 @@ def run_with_configs(global_config: GlobalConfig, user_configs: Sequence[UserCon
         if telegram_bot and telegram_bot.webhook_url
         else 8080
     )
-    if needs_web_server or telegram_bot:
+    # Start web server if needed for WebUI OR if Telegram webhook is configured
+    if needs_web_server or (telegram_bot and telegram_bot.webhook_url):
         if needs_web_server:
             logger.info(f"Starting web server for WebUI authentication on port {webhook_port}...")
         if telegram_bot and telegram_bot.webhook_url:
