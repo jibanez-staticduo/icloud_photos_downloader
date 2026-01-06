@@ -263,6 +263,9 @@ class TelegramBot:
                 return
             else:
                 self.logger.warning("Failed to set webhook, falling back to polling")
+        else:
+            # Delete any existing webhook before starting polling to avoid 409 conflicts
+            self.delete_webhook()
         
         self.logger.info(f"Starting Telegram bot polling (interval: {self.polling_interval}s)...")
         self.thread.start()
@@ -290,6 +293,14 @@ class TelegramBot:
         timeout_seconds = min(2, max(1, self.polling_interval // 3))
         params = {"timeout": timeout_seconds, "offset": self.last_update_id + 1}
         response = requests.get(url, params=params, timeout=timeout_seconds + 5)
+        
+        # Handle 409 Conflict (webhook already set) by deleting webhook and retrying
+        if response.status_code == 409:
+            self.logger.warning("Telegram webhook conflict detected, deleting webhook and retrying...")
+            self.delete_webhook()
+            # Retry once after deleting webhook
+            response = requests.get(url, params=params, timeout=timeout_seconds + 5)
+        
         response.raise_for_status()
         updates = response.json().get("result", [])
         if updates:
