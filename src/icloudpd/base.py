@@ -212,11 +212,27 @@ def ensure_tzinfo(tz: datetime.tzinfo, input: datetime.datetime) -> datetime.dat
 
 
 def create_logger(config: GlobalConfig) -> logging.Logger:
+    # Configure root logger level first to ensure all loggers respect the level
+    root_logger = logging.getLogger()
+    if config.log_level == LogLevel.DEBUG:
+        root_logger.setLevel(logging.DEBUG)
+    elif config.log_level == LogLevel.INFO:
+        root_logger.setLevel(logging.INFO)
+    elif config.log_level == LogLevel.ERROR:
+        root_logger.setLevel(logging.ERROR)
+    else:
+        # Developer's error - not an exhaustive match
+        raise ValueError(f"Unsupported logging level {config.log_level}")
+    
+    # Configure basicConfig with the correct level
     logging.basicConfig(
         format="%(asctime)s %(levelname)-8s %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
         stream=sys.stdout,
+        level=root_logger.level,  # Use the level we just set
+        force=True,  # Force reconfiguration if already configured
     )
+    
     logger = logging.getLogger("icloudpd")
     if config.only_print_filenames:
         logger.disabled = True
@@ -224,15 +240,13 @@ def create_logger(config: GlobalConfig) -> logging.Logger:
         # Need to make sure disabled is reset to the correct value,
         # because the logger instance is shared between tests.
         logger.disabled = False
+        # Set the same level on the specific logger (inherits from root, but explicit is better)
         if config.log_level == LogLevel.DEBUG:
             logger.setLevel(logging.DEBUG)
         elif config.log_level == LogLevel.INFO:
             logger.setLevel(logging.INFO)
         elif config.log_level == LogLevel.ERROR:
             logger.setLevel(logging.ERROR)
-        else:
-            # Developer's error - not an exhaustive match
-            raise ValueError(f"Unsupported logging level {config.log_level}")
     return logger
 
 
