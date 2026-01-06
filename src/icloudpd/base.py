@@ -252,7 +252,8 @@ def run_with_configs(global_config: GlobalConfig, user_configs: Sequence[UserCon
 
     # Start Telegram bot if configured (before web server to pass it if needed)
     telegram_bot = None
-    if global_config.telegram_polling and global_config.telegram_token and global_config.telegram_chat_id:
+    # Start bot if polling is enabled OR webhook is configured
+    if (global_config.telegram_polling or global_config.telegram_webhook_url) and global_config.telegram_token and global_config.telegram_chat_id:
         from icloudpd.telegram_bot import TelegramBot
         telegram_bot = TelegramBot(
             logger,

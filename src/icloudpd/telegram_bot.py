@@ -260,13 +260,18 @@ class TelegramBot:
         if self.webhook_url:
             if self.set_webhook(self.webhook_url):
                 self.logger.info("Telegram bot using webhooks (push notifications)")
+                # Webhook is active, do NOT start polling thread
                 return
             else:
-                self.logger.warning("Failed to set webhook, falling back to polling")
-        else:
-            # Delete any existing webhook before starting polling to avoid 409 conflicts
-            self.delete_webhook()
+                self.logger.error("Failed to set webhook. Webhook URL configured but setup failed.")
+                # If webhook fails, we should NOT fall back to polling automatically
+                # because webhook was explicitly configured - this indicates a configuration issue
+                self.logger.error("Webhook configuration failed. Please check webhook URL and server accessibility.")
+                return  # Don't start polling if webhook was configured but failed
         
+        # No webhook URL configured, use polling
+        # Delete any existing webhook before starting polling to avoid 409 conflicts
+        self.delete_webhook()
         self.logger.info(f"Starting Telegram bot polling (interval: {self.polling_interval}s)...")
         self.thread.start()
 
