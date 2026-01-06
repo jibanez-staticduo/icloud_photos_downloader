@@ -1091,7 +1091,7 @@ def core_single_run(
                     
                     # Create filename_builder if not provided (for backward compatibility)
                     if filename_builder is None:
-                        from icloudpd.filename_policies import build_filename_cleaner, create_filename_builder
+                        from icloudpd.filename_policies import create_filename_builder
                         filename_cleaner = build_filename_cleaner(user_config.keep_unicode_in_filenames)
                         filename_builder = create_filename_builder(
                             user_config.file_match_policy, filename_cleaner

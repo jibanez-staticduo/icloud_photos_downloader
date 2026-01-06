@@ -114,6 +114,53 @@ fi
 [ "$auth_only" = "true" ] && ARGS="$ARGS --auth-only" || true
 [ "$AUTH_ONLY" = "true" ] && ARGS="$ARGS --auth-only" || true
 
+# Telegram bot configuration
+if [ -n "$telegram_token" ]; then
+    ARGS="$ARGS --telegram-token $telegram_token"
+elif [ -n "$TELEGRAM_TOKEN" ]; then
+    ARGS="$ARGS --telegram-token $TELEGRAM_TOKEN"
+fi
+
+if [ -n "$telegram_chat_id" ]; then
+    ARGS="$ARGS --telegram-chat-id $telegram_chat_id"
+elif [ -n "$TELEGRAM_CHAT_ID" ]; then
+    ARGS="$ARGS --telegram-chat-id $TELEGRAM_CHAT_ID"
+fi
+
+if [ "$telegram_polling" = "true" ] || [ "$TELEGRAM_POLLING" = "true" ]; then
+    ARGS="$ARGS --telegram-polling"
+fi
+
+if [ -n "$telegram_polling_interval" ]; then
+    ARGS="$ARGS --telegram-polling-interval $telegram_polling_interval"
+elif [ -n "$TELEGRAM_POLLING_INTERVAL" ]; then
+    ARGS="$ARGS --telegram-polling-interval $TELEGRAM_POLLING_INTERVAL"
+fi
+
+# Telegram webhook URL
+if [ -n "$telegram_webhook_url" ]; then
+    ARGS="$ARGS --telegram-webhook-url \"$telegram_webhook_url\""
+elif [ -n "$TELEGRAM_WEBHOOK_URL" ]; then
+    ARGS="$ARGS --telegram-webhook-url \"$TELEGRAM_WEBHOOK_URL\""
+fi
+
+# Telegram webhook port
+if [ -n "$telegram_webhook_port" ]; then
+    ARGS="$ARGS --telegram-webhook-port $telegram_webhook_port"
+elif [ -n "$TELEGRAM_WEBHOOK_PORT" ]; then
+    ARGS="$ARGS --telegram-webhook-port $TELEGRAM_WEBHOOK_PORT"
+fi
+
+# MFA provider (for Telegram authentication)
+if [ -n "$mfa_provider" ]; then
+    ARGS="$ARGS --mfa-provider $mfa_provider"
+elif [ -n "$MFA_PROVIDER" ]; then
+    ARGS="$ARGS --mfa-provider $MFA_PROVIDER"
+elif [ -n "$TELEGRAM_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+    # Auto-configure telegram as MFA provider if Telegram is configured
+    ARGS="$ARGS --mfa-provider telegram"
+fi
+
 # If no arguments were provided, show help
 if [ -z "$ARGS" ] && [ "$1" != "icloudpd" ] && [ "$1" != "icloud" ]; then
     exec /app/icloudpd --help
