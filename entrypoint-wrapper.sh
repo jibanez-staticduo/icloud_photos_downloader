@@ -26,9 +26,9 @@ fi
 
 # Folder structure
 if [ -n "$folder_structure" ]; then
-    ARGS="$ARGS --folder-structure \"$folder_structure\""
+    ARGS="$ARGS --folder-structure $folder_structure"
 elif [ -n "$FOLDER_STRUCTURE" ]; then
-    ARGS="$ARGS --folder-structure \"$FOLDER_STRUCTURE\""
+    ARGS="$ARGS --folder-structure $FOLDER_STRUCTURE"
 fi
 
 # Cookie directory (default to /config if mounted)
@@ -177,4 +177,3 @@ else
     # Default to icloudpd with our generated args
     exec /app/icloudpd $ARGS "$@"
 fi
-
