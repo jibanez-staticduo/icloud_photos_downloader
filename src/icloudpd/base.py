@@ -1146,6 +1146,7 @@ def core_single_run(
                     # This ensures we only count photos that match the filter
                     # Filter by addedDate if not doing full sync and we have a last sync date
                     # Use 1 day margin to account for timing differences (photo added to device vs uploaded to iCloud)
+                    incremental_sync_active = False
                     if file_cache is not None and not status_exchange.get_force_full_sync():
                         last_sync_timestamp = file_cache.get_last_sync_date()
                         if last_sync_timestamp:
@@ -1176,6 +1177,7 @@ def core_single_run(
                             last_sync_readable = datetime.datetime.fromtimestamp(last_sync_timestamp).strftime("%Y-%m-%d %H:%M:%S")
                             margin_readable = datetime.datetime.fromtimestamp(last_sync_with_margin).strftime("%Y-%m-%d %H:%M:%S")
                             logger.info(f"🔄 INCREMENTAL SYNC: Filtering photos added since {margin_readable} (last sync: {last_sync_readable}, 1 day margin)")
+                            incremental_sync_active = True
                         else:
                             logger.info("🔄 FULL SYNC: No previous sync date found, processing all photos (first sync)")
                     
@@ -1196,10 +1198,14 @@ def core_single_run(
                         
                         photos_enumerator: Iterable[PhotoAsset] = photo_album
                         
-                        # Note: photos_count is calculated before filter, so it shows total
-                        # The actual number of photos returned by Apple after filter will be less
-                        # We'll update photos_to_download as we process them
-                        photos_to_download = photos_count if photos_count is not None else 0
+                        # Note: photos_count is calculated after filter, but the API count may not be exact
+                        # For incremental sync, update photos_to_download dynamically as we iterate
+                        # to get the exact count of photos that pass the filter
+                        if incremental_sync_active:
+                            # Start with 0, will be updated dynamically during iteration
+                            photos_to_download = 0
+                        else:
+                            photos_to_download = photos_count if photos_count is not None else 0
                         
                         progress = status_exchange.get_progress()
                         progress.total_photos_in_icloud = total_photos_in_icloud
@@ -1325,6 +1331,7 @@ def core_single_run(
                                 # Update photos_checked for status tracking (every photo we process)
                                 progress = status_exchange.get_progress()
                                 progress.photos_checked += 1
+                                
                                 try:
                                     item_added_ts = item.added_date.timestamp()
                                     if (
@@ -1337,6 +1344,13 @@ def core_single_run(
                                     pass
 
                                 passer_result = passer(item)
+                                
+                                # For incremental sync, update photos_to_download dynamically
+                                # Count only photos that pass the filter (not all processed photos)
+                                # These are photos that need to be checked/downloaded
+                                if incremental_sync_active and passer_result:
+                                    progress.photos_to_download = progress.photos_to_download + 1
+                                
                                 download_result = passer_result and download_photo(
                                     consecutive_files_found, item
                                 )
