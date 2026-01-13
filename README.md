@@ -1,4 +1,6 @@
-# iCloud Photos Downloader [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
+# !!!! [Looking for MAINTAINER for this project](https://github.com/icloud-photos-downloader/icloud_photos_downloader/issues/1305) !!!!
+
+# iCloud Photos Downloader [![Quality Checks](https://github.com/icloud-photos-downloader/icloud_photos_downloader/workflows/Quality%20Checks/badge.svg)](https://github.com/icloud-photos-downloader/icloud_photos_downloader/actions/workflows/quality-checks.yml) [![Build and Package](https://github.com/icloud-photos-downloader/icloud_photos_downloader/workflows/Produce%20Artifacts/badge.svg)](https://github.com/icloud-photos-downloader/icloud_photos_downloader/actions/workflows/produce-artifacts.yml) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
 > **Note:** This is a fork of the original [iCloud Photos Downloader](https://github.com/icloud-photos-downloader/icloud_photos_downloader) project with additional features including Telegram bot integration for remote control and authentication.
 
