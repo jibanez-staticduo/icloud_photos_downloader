@@ -1,6 +1,7 @@
 import argparse
 import copy
 import datetime
+import os
 import pathlib
 import sys
 from itertools import dropwhile
@@ -466,12 +467,13 @@ def format_help() -> str:
 
 
 def map_to_config(user_ns: argparse.Namespace) -> UserConfig:
+    cookie_dir = os.path.expandvars(os.path.expanduser(user_ns.cookie_directory))
     return UserConfig(
         username=user_ns.username,
         password=user_ns.password,
         directory=user_ns.directory,
         auth_only=user_ns.auth_only,
-        cookie_directory=user_ns.cookie_directory,
+        cookie_directory=cookie_dir,
         sizes=list(
             map_(AssetVersionSize, foundation.unique_sequence(user_ns.sizes or ["original"]))
         ),

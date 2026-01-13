@@ -224,14 +224,15 @@ def create_logger(config: GlobalConfig) -> logging.Logger:
         # Developer's error - not an exhaustive match
         raise ValueError(f"Unsupported logging level {config.log_level}")
     
-    # Configure basicConfig with the correct level
-    logging.basicConfig(
-        format="%(asctime)s %(levelname)-8s %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        stream=sys.stdout,
-        level=root_logger.level,  # Use the level we just set
-        force=True,  # Force reconfiguration if already configured
-    )
+    # Configure logging only if nothing has configured the root logger yet.
+    # This is important for tests (e.g., pytest's caplog) and for embedding use-cases.
+    if not root_logger.handlers:
+        logging.basicConfig(
+            format="%(asctime)s %(levelname)-8s %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            stream=sys.stdout,
+            level=root_logger.level,  # Use the level we just set
+        )
     
     logger = logging.getLogger("icloudpd")
     if config.only_print_filenames:
@@ -470,12 +471,13 @@ def _process_all_users_once(
             if user_config.directory is not None:
                 # Create cache database path in the cookie directory or config directory
                 # We only use it for storing last sync date, not for file caching
-                cache_dir = user_config.cookie_directory or os.path.dirname(user_config.directory)
+                cache_dir_raw = user_config.cookie_directory or os.path.dirname(
+                    os.path.expanduser(user_config.directory)
+                )
+                cache_dir = os.path.expandvars(os.path.expanduser(cache_dir_raw))
+                os.makedirs(cache_dir, exist_ok=True)
                 cache_db_path = os.path.join(cache_dir, "file_cache.db")
                 file_cache = FileCache(cache_db_path, logger)
-                
-                # Reset force_full_sync flag after checking
-                status_exchange.set_force_full_sync(False)
 
             # Create downloader partial - file_cache and use_cache will be passed later
             # We need to create a wrapper that captures file_cache and use_cache
@@ -1138,9 +1140,50 @@ def core_single_run(
                     def sum_(inp: Iterable[int]) -> int:
                         return sum(inp)
 
+                    max_added_date_seen_ts_all: float | None = None
+                    
+                    # OPTIMIZATION: Apply addedDate filter BEFORE calculating photos_count
+                    # This ensures we only count photos that match the filter
+                    # Filter by addedDate if not doing full sync and we have a last sync date
+                    # Use 1 day margin to account for timing differences (photo added to device vs uploaded to iCloud)
+                    if file_cache is not None and not status_exchange.get_force_full_sync():
+                        last_sync_timestamp = file_cache.get_last_sync_date()
+                        if last_sync_timestamp:
+                            # Subtract 1 day (86400 seconds) as margin for timing differences
+                            margin_seconds = 86400  # 1 day
+                            last_sync_with_margin = last_sync_timestamp - margin_seconds
+                            
+                            # Add filter for addedDate >= (last_sync_date - 1 day)
+                            # Convert timestamp (seconds) to milliseconds (what iCloud uses)
+                            added_date_ms = int(last_sync_with_margin * 1000)
+                            
+                            # Create filter - try GREATER_THAN_OR_EQUALS first (CloudKit standard)
+                            # If that doesn't work, we can fall back to GREATER_THAN
+                            added_date_filter = {
+                                "fieldName": "addedDate",
+                                "fieldValue": {"type": "INT64", "value": added_date_ms},
+                                "comparator": "GREATER_THAN_OR_EQUALS",
+                            }
+                            
+                            # Apply filter to all albums BEFORE counting
+                            for photo_album in albums:
+                                if photo_album.query_filter is None:
+                                    photo_album.query_filter = [added_date_filter]
+                                else:
+                                    # Add to existing filters
+                                    photo_album.query_filter = list(photo_album.query_filter) + [added_date_filter]
+                            
+                            last_sync_readable = datetime.datetime.fromtimestamp(last_sync_timestamp).strftime("%Y-%m-%d %H:%M:%S")
+                            margin_readable = datetime.datetime.fromtimestamp(last_sync_with_margin).strftime("%Y-%m-%d %H:%M:%S")
+                            logger.info(f"🔄 INCREMENTAL SYNC: Filtering photos added since {margin_readable} (last sync: {last_sync_readable}, 1 day margin)")
+                        else:
+                            logger.info("🔄 FULL SYNC: No previous sync date found, processing all photos (first sync)")
+                    
+                    # Calculate photos_count AFTER applying filters
+                    # This gives us the actual number of photos that will be processed
                     photos_count: int | None = compose(sum_, album_lengths)(albums)
                     total_photos_in_icloud = photos_count if photos_count is not None else 0
-                    logger.info(f"Found {total_photos_in_icloud} total photos in iCloud")
+                    logger.info(f"Found {total_photos_in_icloud} total photos in iCloud (after filters)")
                     
                     for photo_album in albums:
                         # OPTIMIZATION: Increase page_size to reduce number of HTTP requests
@@ -1150,40 +1193,6 @@ def core_single_run(
                             original_page_size = photo_album.page_size
                             photo_album.page_size = 500  # Increase from 100 to 500 (1000 records per request)
                             logger.debug(f"Increased page_size from {original_page_size} to {photo_album.page_size} for faster loading")
-                        
-                        # OPTIMIZATION: Filter by addedDate if not doing full sync and we have a last sync date
-                        # This dramatically reduces the number of photos to process
-                        # Use 1 day margin to account for timing differences (photo added to device vs uploaded to iCloud)
-                        if file_cache is not None and not status_exchange.get_force_full_sync():
-                            last_sync_timestamp = file_cache.get_last_sync_date()
-                            if last_sync_timestamp:
-                                # Subtract 1 day (86400 seconds) as margin for timing differences
-                                margin_seconds = 86400  # 1 day
-                                last_sync_with_margin = last_sync_timestamp - margin_seconds
-                                
-                                # Add filter for addedDate >= (last_sync_date - 1 day)
-                                # Convert timestamp (seconds) to milliseconds (what iCloud uses)
-                                added_date_ms = int(last_sync_with_margin * 1000)
-                                
-                                # Create or extend query_filter
-                                added_date_filter = {
-                                    "fieldName": "addedDate",
-                                    "fieldValue": {"type": "INT64", "value": added_date_ms},
-                                    "comparator": "GREATER_THAN_OR_EQUALS",
-                                }
-                                
-                                if photo_album.query_filter is None:
-                                    photo_album.query_filter = [added_date_filter]
-                                else:
-                                    # Add to existing filters
-                                    photo_album.query_filter = list(photo_album.query_filter) + [added_date_filter]
-                                
-                                last_sync_readable = datetime.datetime.fromtimestamp(last_sync_timestamp).strftime("%Y-%m-%d %H:%M:%S")
-                                margin_readable = datetime.datetime.fromtimestamp(last_sync_with_margin).strftime("%Y-%m-%d %H:%M:%S")
-                                logger.info(f"🔄 INCREMENTAL SYNC: Filtering photos added since {margin_readable} (last sync: {last_sync_readable}, 1 day margin)")
-                                logger.info(f"   This will only process NEW photos, not all {total_photos_in_icloud} photos")
-                            else:
-                                logger.info("🔄 FULL SYNC: No previous sync date found, processing all photos (first sync)")
                         
                         photos_enumerator: Iterable[PhotoAsset] = photo_album
                         
@@ -1316,6 +1325,16 @@ def core_single_run(
                                 # Update photos_checked for status tracking (every photo we process)
                                 progress = status_exchange.get_progress()
                                 progress.photos_checked += 1
+                                try:
+                                    item_added_ts = item.added_date.timestamp()
+                                    if (
+                                        max_added_date_seen_ts_all is None
+                                        or item_added_ts > max_added_date_seen_ts_all
+                                    ):
+                                        max_added_date_seen_ts_all = item_added_ts
+                                except Exception:
+                                    # addedDate should be present, but don't let this break downloads
+                                    pass
 
                                 passer_result = passer(item)
                                 download_result = passer_result and download_photo(
@@ -1446,11 +1465,31 @@ def core_single_run(
                         if global_config.watch_with_interval:
                             progress.watch_interval = global_config.watch_with_interval
                             progress.last_sync_time = current_time
-                        # Always save last sync date to cache for incremental syncs (even without watch mode)
-                        # This allows subsequent runs to only process new photos
-                        if file_cache is not None:
-                            file_cache.set_last_sync_date(current_time)
-                            logger.info(f"Saved last sync date: {datetime.datetime.fromtimestamp(current_time).strftime('%Y-%m-%d %H:%M:%S')} (next sync will only process new photos)")
+                        # Save last sync date for incremental syncs (even without watch mode).
+                        # Use iCloud's own `addedDate` (max seen) instead of local clock time.
+                        # Only update on successful completion (not cancelled) and only when we
+                        # fully processed the selection (i.e., no --recent/--until-found limits).
+                        if (
+                            file_cache is not None
+                            and not status_exchange.get_progress().cancel
+                            and user_config.recent is None
+                            and user_config.until_found is None
+                        ):
+                            if max_added_date_seen_ts_all is not None:
+                                file_cache.set_last_sync_date(max_added_date_seen_ts_all)
+                                logger.info(
+                                    "Saved last sync date (iCloud addedDate): %s (next sync will only process new photos)",
+                                    datetime.datetime.fromtimestamp(max_added_date_seen_ts_all).strftime(
+                                        "%Y-%m-%d %H:%M:%S"
+                                    ),
+                                )
+                            else:
+                                logger.debug(
+                                    "No photos were listed in this run; keeping previous last sync date unchanged."
+                                )
+                        # Reset full-sync flag after completing the requested sync attempt (success or cancel),
+                        # so subsequent scheduled runs don't unexpectedly stay in full-sync mode.
+                        status_exchange.set_force_full_sync(False)
                         progress.reset()
 
                     if user_config.auto_delete:
