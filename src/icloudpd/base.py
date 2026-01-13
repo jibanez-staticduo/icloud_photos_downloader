@@ -1344,16 +1344,15 @@ def core_single_run(
                                     pass
 
                                 passer_result = passer(item)
-                                
-                                # For incremental sync, update photos_to_download dynamically
-                                # Count only photos that pass the filter (not all processed photos)
-                                # These are photos that need to be checked/downloaded
-                                if incremental_sync_active and passer_result:
-                                    progress.photos_to_download = progress.photos_to_download + 1
-                                
                                 download_result = passer_result and download_photo(
                                     consecutive_files_found, item
                                 )
+                                
+                                # For incremental sync, update photos_to_download dynamically
+                                # Count only photos that were actually downloaded (not just checked)
+                                # This gives the real number of photos that needed download
+                                if incremental_sync_active and download_result:
+                                    progress.photos_to_download = progress.photos_to_download + 1
                                 
                                 # Count photos that were actually downloaded
                                 if download_result:
