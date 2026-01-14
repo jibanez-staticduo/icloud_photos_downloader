@@ -3,6 +3,7 @@ import copy
 import json
 import logging
 import re
+import time
 import typing
 from datetime import datetime
 from typing import Any, Callable, Dict, Generator, Sequence, Tuple, cast
@@ -500,15 +501,25 @@ class PhotoAlbum:
         return self.photos
 
     def __len__(self) -> int:
-        url = f"{self.service_endpoint}/internal/records/query/batch?{urlencode(self.params)}"
-        request = self.session.post(
-            url,
-            data=json.dumps(self._count_query_gen(self.obj_type)),
-            headers={"Content-type": "text/plain"},
-        )
-        response = request.json()
-
-        return int(response["batch"][0]["records"][0]["fields"]["itemCount"]["value"])
+        # If query_filter is set, we cannot use the simple count query
+        # because it doesn't support filters. We need to count by iterating.
+        # However, for performance, if no filter is set, use the fast count query.
+        if self.query_filter is None or len(self.query_filter) == 0:
+            url = f"{self.service_endpoint}/internal/records/query/batch?{urlencode(self.params)}"
+            request = self.session.post(
+                url,
+                data=json.dumps(self._count_query_gen(self.obj_type)),
+                headers={"Content-type": "text/plain"},
+            )
+            response = request.json()
+            return int(response["batch"][0]["records"][0]["fields"]["itemCount"]["value"])
+        else:
+            # When filters are active, we cannot get an accurate count without iterating
+            # Return a large number to indicate "unknown" - the actual count will be
+            # determined during iteration. This prevents the progress bar from showing
+            # incorrect totals, but the iteration will still work correctly.
+            # The caller should handle this by counting dynamically during iteration.
+            return 999999  # Large number to indicate "unknown count with filter"
 
     # Perform the request in a separate method so that we
     # can mock it to test session errors.
@@ -522,8 +533,19 @@ class PhotoAlbum:
 
     @property
     def photos(self) -> Generator["PhotoAsset", Any, None]:
+        total_yielded = 0
+        request_count = 0
+        seen_record_names = set()  # Track seen records to avoid duplicates when filter is active
+        last_added_date_ms = None  # Track last addedDate for cursor-based pagination
+        # When query_filter is active, we cannot use startRank for pagination
+        # because it applies to the unfiltered set. Reset offset to 0 and iterate
+        # from the beginning, using cursor-based pagination with addedDate.
+        if self.query_filter is not None and len(self.query_filter) > 0:
+            original_offset = self.offset
+            self.offset = 0
         while True:
             request = self.photos_request()
+            request_count += 1
 
             #            url = ('%s/records/query?' % self.service_endpoint) + \
             #                urlencode(self.service.params)
@@ -537,6 +559,15 @@ class PhotoAlbum:
 
             response = request.json()
 
+            # #region agent log
+            import json
+            try:
+                with open("/app/src/.cursor/debug.log", "a") as logf:
+                    num_records = len(response.get("records", []))
+                    logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H2,H4","location":"photos.py:526","message":"photos_request response","data":{"request_count":request_count,"num_records":num_records,"offset":self.offset},"timestamp":int(time.time()*1000)})+"\n")
+            except: pass
+            # #endregion
+
             asset_records = {}
             master_records = []
             for rec in response["records"]:
@@ -548,11 +579,79 @@ class PhotoAlbum:
 
             master_records_len = len(master_records)
             if master_records_len:
+                new_records_count = 0
+                batch_last_added_date_ms = None
                 for master_record in master_records:
                     record_name = master_record["recordName"]
+                    # When filter is active, skip duplicates (same record returned in multiple requests)
+                    if self.query_filter is not None and len(self.query_filter) > 0:
+                        if record_name in seen_record_names:
+                            continue  # Skip duplicate
+                        seen_record_names.add(record_name)
+                    
+                    # Track the addedDate of this record for cursor-based pagination
+                    # addedDate is in asset_record, not master_record
+                    if self.query_filter is not None and len(self.query_filter) > 0:
+                        asset_record = asset_records.get(record_name)
+                        if asset_record:
+                            added_date_field = asset_record.get("fields", {}).get("addedDate")
+                            if added_date_field and "value" in added_date_field:
+                                record_added_date_ms = added_date_field["value"]
+                                if batch_last_added_date_ms is None or record_added_date_ms > batch_last_added_date_ms:
+                                    batch_last_added_date_ms = record_added_date_ms
+                    
+                    total_yielded += 1
+                    new_records_count += 1
                     yield PhotoAsset(master_record, asset_records[record_name])
-                    self.increment_offset(1)
+                    # When query_filter is active, we cannot use offset for pagination
+                    # because startRank is not included in the query. The offset is
+                    # reset to 0 at the start and should remain 0 throughout iteration.
+                    # Only increment offset when there's no filter (for normal pagination).
+                    if self.query_filter is None or len(self.query_filter) == 0:
+                        self.increment_offset(1)
+                    # #region agent log
+                    import json
+                    try:
+                        with open("/app/src/.cursor/debug.log", "a") as logf:
+                            logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H2","location":"photos.py:587","message":"processing photo with filter","data":{"has_filter":self.query_filter is not None and len(self.query_filter) > 0,"offset":self.offset,"total_yielded":total_yielded,"new_records_count":new_records_count},"timestamp":int(time.time()*1000)})+"\n")
+                    except: pass
+                    # #endregion
+                
+                # When filter is active, update the cursor for next request
+                if self.query_filter is not None and len(self.query_filter) > 0:
+                    if batch_last_added_date_ms is not None:
+                        last_added_date_ms = batch_last_added_date_ms
+                        # Update the addedDate filter to use the last seen date as cursor
+                        # Use GREATER_THAN (not EQUALS) to avoid including the last record again
+                        for filter_item in self.query_filter:
+                            if filter_item.get("fieldName") == "addedDate":
+                                # Update to use the last seen date + 1ms to get next batch
+                                filter_item["fieldValue"]["value"] = last_added_date_ms + 1
+                                filter_item["comparator"] = "GREATER_THAN_OR_EQUALS"
+                                # #region agent log
+                                try:
+                                    with open("/app/src/.cursor/debug.log", "a") as logf:
+                                        logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H2","location":"photos.py:620","message":"updated cursor for next request","data":{"last_added_date_ms":last_added_date_ms,"new_filter_value":last_added_date_ms + 1},"timestamp":int(time.time()*1000)})+"\n")
+                                except: pass
+                                # #endregion
+                                break
+                
+                # When filter is active and we got no new records (all duplicates), we're done
+                if self.query_filter is not None and len(self.query_filter) > 0 and new_records_count == 0:
+                    # #region agent log
+                    try:
+                        with open("/app/src/.cursor/debug.log", "a") as logf:
+                            logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H2","location":"photos.py:605","message":"filter active: no new records, ending iteration","data":{"total_yielded":total_yielded,"request_count":request_count},"timestamp":int(time.time()*1000)})+"\n")
+                    except: pass
+                    # #endregion
+                    break
             else:
+                # #region agent log
+                try:
+                    with open("/app/src/.cursor/debug.log", "a") as logf:
+                        logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H2,H4","location":"photos.py:556","message":"photos generator finished","data":{"total_yielded":total_yielded,"request_count":request_count},"timestamp":int(time.time()*1000)})+"\n")
+                except: pass
+                # #endregion
                 break
 
     def increment_offset(self, value: int) -> None:
@@ -582,23 +681,65 @@ class PhotoAlbum:
     def _list_query_gen(
         self, offset: int, list_type: str, query_filter: Sequence[Dict[str, None]] | None = None
     ) -> Dict[str, Any]:
+        # When query_filter is active, we cannot use startRank because it applies
+        # to the unfiltered set, making the filter ineffective. Instead, we must
+        # iterate from the beginning and skip records until we reach the offset.
+        # However, for performance, if offset is 0 and there's a filter, we can
+        # start from the beginning without startRank.
+        filterBy_base = [
+            {
+                "fieldName": "direction",
+                "fieldValue": {"type": "STRING", "value": "ASCENDING"},
+                "comparator": "EQUALS",
+            },
+        ]
+        
+        # Only add startRank if there's NO filter active
+        # When filter is active, we cannot use startRank because it applies to the
+        # unfiltered set, making the filter ineffective. The generator will reset
+        # offset to 0 when filter is active.
+        # #region agent log
+        import json
+        try:
+            with open("/app/src/.cursor/debug.log", "a") as logf:
+                logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H2","location":"photos.py:638","message":"_list_query_gen checking startRank","data":{"query_filter":str(query_filter),"query_filter_is_none":query_filter is None,"query_filter_len":len(query_filter) if query_filter else 0,"offset":offset},"timestamp":int(time.time()*1000)})+"\n")
+        except: pass
+        # #endregion
+        if query_filter is None or len(query_filter) == 0:
+            filterBy_base.insert(0, {
+                "fieldName": "startRank",
+                "fieldValue": {"type": "INT64", "value": offset},
+                "comparator": "EQUALS",
+            })
+            # #region agent log
+            try:
+                with open("/app/src/.cursor/debug.log", "a") as logf:
+                    logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H2","location":"photos.py:644","message":"_list_query_gen added startRank","data":{"offset":offset},"timestamp":int(time.time()*1000)})+"\n")
+            except: pass
+            # #endregion
+        else:
+            # #region agent log
+            try:
+                with open("/app/src/.cursor/debug.log", "a") as logf:
+                    logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H2","location":"photos.py:651","message":"_list_query_gen NOT adding startRank (filter active)","data":{"offset":offset},"timestamp":int(time.time()*1000)})+"\n")
+            except: pass
+            # #endregion
+        
+        # When query_filter is active, we need a much higher resultsLimit
+        # because we cannot use startRank for pagination. This ensures we get
+        # as many filtered results as possible in each request.
+        results_limit = self.page_size * 2
+        if query_filter is not None and len(query_filter) > 0:
+            # Use a very high limit when filter is active to get all filtered results
+            # in as few requests as possible (since we can't paginate with startRank)
+            results_limit = 10000
+        
         query: Dict[str, Any] = {
             "query": {
-                "filterBy": [
-                    {
-                        "fieldName": "startRank",
-                        "fieldValue": {"type": "INT64", "value": offset},
-                        "comparator": "EQUALS",
-                    },
-                    {
-                        "fieldName": "direction",
-                        "fieldValue": {"type": "STRING", "value": "ASCENDING"},
-                        "comparator": "EQUALS",
-                    },
-                ],
+                "filterBy": filterBy_base,
                 "recordType": list_type,
             },
-            "resultsLimit": self.page_size * 2,
+            "resultsLimit": results_limit,
             "desiredKeys": [
                 "resJPEGFullWidth",
                 "resJPEGFullHeight",
@@ -705,8 +846,22 @@ class PhotoAlbum:
             "zoneID": self._zone_id,
         }
 
+        # #region agent log
+        import json
+        try:
+            with open("/app/src/.cursor/debug.log", "a") as logf:
+                logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H2","location":"photos.py:708","message":"_list_query_gen before extend","data":{"query_filter":str(query_filter),"offset":offset,"list_type":list_type,"page_size":self.page_size},"timestamp":int(time.time()*1000)})+"\n")
+        except: pass
+        # #endregion
+
         if query_filter:
             query["query"]["filterBy"].extend(query_filter)
+            # #region agent log
+            try:
+                with open("/app/src/.cursor/debug.log", "a") as logf:
+                    logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H2","location":"photos.py:712","message":"_list_query_gen after extend","data":{"final_filterBy_count":len(query["query"]["filterBy"]),"query_json":json.dumps(query)},"timestamp":int(time.time()*1000)})+"\n")
+            except: pass
+            # #endregion
 
         return query
 

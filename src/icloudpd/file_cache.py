@@ -220,14 +220,41 @@ class FileCache:
         cache_dir = os.path.dirname(self.cache_db_path)
         sync_date_file = os.path.join(cache_dir, ".last_sync_date")
         
+        # #region agent log
+        import json
+        try:
+            with open("/app/src/.cursor/debug.log", "a") as logf:
+                logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1,H3","location":"file_cache.py:218","message":"get_last_sync_date entry","data":{"sync_date_file":sync_date_file,"exists":os.path.exists(sync_date_file)},"timestamp":int(time.time()*1000)})+"\n")
+        except: pass
+        # #endregion
+        
         if not os.path.exists(sync_date_file):
+            # #region agent log
+            try:
+                with open("/app/src/.cursor/debug.log", "a") as logf:
+                    logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1,H3","location":"file_cache.py:224","message":"get_last_sync_date no file","data":{},"timestamp":int(time.time()*1000)})+"\n")
+            except: pass
+            # #endregion
             return None
         
         try:
             with open(sync_date_file, 'r') as f:
                 timestamp = float(f.read().strip())
+                # #region agent log
+                import datetime
+                try:
+                    with open("/app/src/.cursor/debug.log", "a") as logf:
+                        logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1,H3","location":"file_cache.py:229","message":"get_last_sync_date success","data":{"timestamp":timestamp,"readable":datetime.datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")},"timestamp":int(time.time()*1000)})+"\n")
+                except: pass
+                # #endregion
                 return timestamp
-        except (ValueError, IOError):
+        except (ValueError, IOError) as e:
+            # #region agent log
+            try:
+                with open("/app/src/.cursor/debug.log", "a") as logf:
+                    logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1,H3","location":"file_cache.py:231","message":"get_last_sync_date error","data":{"error":str(e)},"timestamp":int(time.time()*1000)})+"\n")
+            except: pass
+            # #endregion
             return None
 
     def set_last_sync_date(self, timestamp: float) -> None:

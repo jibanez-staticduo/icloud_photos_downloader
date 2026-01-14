@@ -146,17 +146,30 @@ class TelegramBot:
                 status_text = "🔄 Filtering photos"
                 user_text = f"\n👤 User: {current_user}" if current_user else ""
                 if progress.photos_checked > 0:
-                    percent = round(100 * progress.photos_checked / progress.total_photos_in_icloud)
+                    # When total_photos_in_icloud is 999999, it means we're using a filter
+                    # and don't know the exact total. Use photos_checked as the total for display.
+                    if progress.total_photos_in_icloud >= 999999:
+                        # Incremental sync with filter: show actual count processed
+                        total_display = progress.photos_checked
+                        percent = 100  # Show 100% since we're processing incrementally
+                    else:
+                        # Normal sync: use the known total
+                        total_display = progress.total_photos_in_icloud
+                        percent = round(100 * progress.photos_checked / total_display) if total_display > 0 else 0
+                    
                     # Calculate rate if processing has started
                     rate_text = ""
                     if progress.processing_start_time > 0:
                         elapsed = time.time() - progress.processing_start_time
                         rate = progress.photos_checked / elapsed if elapsed > 0 else 0.0
                         rate_text = f" (Rate: {rate:.2f} items/s)"
-                    progress_text = f"\n📊 Checked: {progress.photos_checked}/{progress.total_photos_in_icloud} ({percent}%){rate_text}"
+                    progress_text = f"\n📊 Checked: {progress.photos_checked}/{total_display} ({percent}%){rate_text}"
                 else:
                     # Processing just started, show initial message
-                    progress_text = f"\n📊 Starting: 0/{progress.total_photos_in_icloud} (0%)"
+                    if progress.total_photos_in_icloud >= 999999:
+                        progress_text = f"\n📊 Starting: 0/? (0%)"
+                    else:
+                        progress_text = f"\n📊 Starting: 0/{progress.total_photos_in_icloud} (0%)"
                 if progress.photos_to_download > 0:
                     progress_text += f"\n📥 {progress.photos_to_download} photos to download"
                 return f"{status_text}{user_text}{progress_text}"

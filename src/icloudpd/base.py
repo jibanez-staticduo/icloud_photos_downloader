@@ -1147,8 +1147,21 @@ def core_single_run(
                     # Filter by addedDate if not doing full sync and we have a last sync date
                     # Use 1 day margin to account for timing differences (photo added to device vs uploaded to iCloud)
                     incremental_sync_active = False
+                    # #region agent log
+                    import json
+                    try:
+                        with open("/app/src/.cursor/debug.log", "a") as logf:
+                            logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1,H5","location":"base.py:1149","message":"checking incremental sync conditions","data":{"file_cache_exists":file_cache is not None,"force_full_sync":status_exchange.get_force_full_sync()},"timestamp":int(time.time()*1000)})+"\n")
+                    except: pass
+                    # #endregion
                     if file_cache is not None and not status_exchange.get_force_full_sync():
                         last_sync_timestamp = file_cache.get_last_sync_date()
+                        # #region agent log
+                        try:
+                            with open("/app/src/.cursor/debug.log", "a") as logf:
+                                logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1","location":"base.py:1151","message":"got last_sync_timestamp","data":{"last_sync_timestamp":last_sync_timestamp},"timestamp":int(time.time()*1000)})+"\n")
+                        except: pass
+                        # #endregion
                         if last_sync_timestamp:
                             # Subtract 1 day (86400 seconds) as margin for timing differences
                             margin_seconds = 86400  # 1 day
@@ -1166,6 +1179,13 @@ def core_single_run(
                                 "comparator": "GREATER_THAN_OR_EQUALS",
                             }
                             
+                            # #region agent log
+                            try:
+                                with open("/app/src/.cursor/debug.log", "a") as logf:
+                                    logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1,H2","location":"base.py:1163","message":"created added_date_filter","data":{"added_date_filter":added_date_filter,"added_date_ms":added_date_ms,"last_sync_with_margin":last_sync_with_margin},"timestamp":int(time.time()*1000)})+"\n")
+                            except: pass
+                            # #endregion
+                            
                             # Apply filter to all albums BEFORE counting
                             for photo_album in albums:
                                 if photo_album.query_filter is None:
@@ -1173,6 +1193,13 @@ def core_single_run(
                                 else:
                                     # Add to existing filters
                                     photo_album.query_filter = list(photo_album.query_filter) + [added_date_filter]
+                            
+                            # #region agent log
+                            try:
+                                with open("/app/src/.cursor/debug.log", "a") as logf:
+                                    logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1","location":"base.py:1175","message":"applied filter to albums","data":{"num_albums":len(albums)},"timestamp":int(time.time()*1000)})+"\n")
+                            except: pass
+                            # #endregion
                             
                             last_sync_readable = datetime.datetime.fromtimestamp(last_sync_timestamp).strftime("%Y-%m-%d %H:%M:%S")
                             margin_readable = datetime.datetime.fromtimestamp(last_sync_with_margin).strftime("%Y-%m-%d %H:%M:%S")
@@ -1185,6 +1212,12 @@ def core_single_run(
                     # This gives us the actual number of photos that will be processed
                     photos_count: int | None = compose(sum_, album_lengths)(albums)
                     total_photos_in_icloud = photos_count if photos_count is not None else 0
+                    # #region agent log
+                    try:
+                        with open("/app/src/.cursor/debug.log", "a") as logf:
+                            logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1","location":"base.py:1186","message":"photos_count after filter","data":{"photos_count":photos_count,"total_photos_in_icloud":total_photos_in_icloud,"incremental_sync_active":incremental_sync_active},"timestamp":int(time.time()*1000)})+"\n")
+                    except: pass
+                    # #endregion
                     logger.info(f"Found {total_photos_in_icloud} total photos in iCloud (after filters)")
                     
                     for photo_album in albums:
@@ -1317,8 +1350,10 @@ def core_single_run(
                         # Use lambda to pass keyword arguments correctly
                         download_photo = lambda counter, photo: downloader(icloud, counter, photo, total_photos=photos_to_download, start_time=loop_start_time)
 
+                        photos_processed_count = 0
                         for item in photos_bar:
                             try:
+                                photos_processed_count += 1
                                 if should_break(consecutive_files_found):
                                     logger.info(
                                         "Found %s consecutive previously downloaded photos. Exiting",
@@ -1339,8 +1374,21 @@ def core_single_run(
                                         or item_added_ts > max_added_date_seen_ts_all
                                     ):
                                         max_added_date_seen_ts_all = item_added_ts
-                                except Exception:
+                                        # #region agent log
+                                        if photos_processed_count % 100 == 0 or photos_processed_count <= 5:
+                                            try:
+                                                with open("/app/src/.cursor/debug.log", "a") as logf:
+                                                    logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H3","location":"base.py:1336","message":"processing photo","data":{"photos_processed_count":photos_processed_count,"item_added_ts":item_added_ts,"max_added_date_seen_ts_all":max_added_date_seen_ts_all},"timestamp":int(time.time()*1000)})+"\n")
+                                            except: pass
+                                        # #endregion
+                                except Exception as e:
                                     # addedDate should be present, but don't let this break downloads
+                                    # #region agent log
+                                    try:
+                                        with open("/app/src/.cursor/debug.log", "a") as logf:
+                                            logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H3","location":"base.py:1343","message":"error getting added_date","data":{"error":str(e)},"timestamp":int(time.time()*1000)})+"\n")
+                                    except: pass
+                                    # #endregion
                                     pass
 
                                 passer_result = passer(item)
@@ -1482,6 +1530,12 @@ def core_single_run(
                         # Use iCloud's own `addedDate` (max seen) instead of local clock time.
                         # Only update on successful completion (not cancelled) and only when we
                         # fully processed the selection (i.e., no --recent/--until-found limits).
+                        # #region agent log
+                        try:
+                            with open("/app/src/.cursor/debug.log", "a") as logf:
+                                logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H3","location":"base.py:1465","message":"checking save last_sync_date conditions","data":{"file_cache_exists":file_cache is not None,"cancel":status_exchange.get_progress().cancel,"recent":user_config.recent,"until_found":user_config.until_found,"max_added_date_seen_ts_all":max_added_date_seen_ts_all,"photos_processed_count":photos_processed_count},"timestamp":int(time.time()*1000)})+"\n")
+                        except: pass
+                        # #endregion
                         if (
                             file_cache is not None
                             and not status_exchange.get_progress().cancel
@@ -1490,6 +1544,12 @@ def core_single_run(
                         ):
                             if max_added_date_seen_ts_all is not None:
                                 file_cache.set_last_sync_date(max_added_date_seen_ts_all)
+                                # #region agent log
+                                try:
+                                    with open("/app/src/.cursor/debug.log", "a") as logf:
+                                        logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H3","location":"base.py:1472","message":"saved last_sync_date","data":{"max_added_date_seen_ts_all":max_added_date_seen_ts_all,"readable":datetime.datetime.fromtimestamp(max_added_date_seen_ts_all).strftime("%Y-%m-%d %H:%M:%S")},"timestamp":int(time.time()*1000)})+"\n")
+                                except: pass
+                                # #endregion
                                 logger.info(
                                     "Saved last sync date (iCloud addedDate): %s (next sync will only process new photos)",
                                     datetime.datetime.fromtimestamp(max_added_date_seen_ts_all).strftime(
@@ -1497,6 +1557,12 @@ def core_single_run(
                                     ),
                                 )
                             else:
+                                # #region agent log
+                                try:
+                                    with open("/app/src/.cursor/debug.log", "a") as logf:
+                                        logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H3","location":"base.py:1481","message":"max_added_date_seen_ts_all is None","data":{},"timestamp":int(time.time()*1000)})+"\n")
+                                except: pass
+                                # #endregion
                                 logger.debug(
                                     "No photos were listed in this run; keeping previous last sync date unchanged."
                                 )
