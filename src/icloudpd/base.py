@@ -1219,7 +1219,11 @@ def core_single_run(
                             logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1","location":"base.py:1186","message":"photos_count after filter","data":{"photos_count":photos_count,"total_photos_in_icloud":total_photos_in_icloud,"incremental_sync_active":incremental_sync_active},"timestamp":int(time.time()*1000)})+"\n")
                     except: pass
                     # #endregion
-                    logger.info(f"Found {total_photos_in_icloud} total photos in iCloud (after filters)")
+                    # Show user-friendly message (999999 means "unknown count with filter")
+                    if total_photos_in_icloud >= 999999:
+                        logger.info("Found photos in iCloud (incremental sync - counting as we go...)")
+                    else:
+                        logger.info(f"Found {total_photos_in_icloud} total photos in iCloud (after filters)")
                     
                     for photo_album in albums:
                         # OPTIMIZATION: Increase page_size to reduce number of HTTP requests
@@ -1293,7 +1297,7 @@ def core_single_run(
                             )
                             # logger.set_tqdm(photos_enumerator)
 
-                        if photos_count is not None:
+                        if photos_count is not None and photos_count < 999999:
                             plural_suffix = "" if photos_count == 1 else "s"
                             photos_count_str = (
                                 "the first" if photos_count == 1 else str(photos_count)
@@ -1307,6 +1311,27 @@ def core_single_run(
                                 photo_video_phrase = (
                                     "photo or video" if photos_count == 1 else "photos and videos"
                                 )
+                            logger.info(
+                                ("Downloading %s %s %s to %s ..."),
+                                photos_count_str,
+                                ",".join([_s.value for _s in user_config.sizes]),
+                                photo_video_phrase,
+                                directory,
+                            )
+                        elif photos_count is not None and photos_count >= 999999:
+                            # Incremental sync with unknown count - show friendly message
+                            if user_config.skip_photos or user_config.skip_videos:
+                                photo_video_phrase = (
+                                    "photos" if user_config.skip_videos else "videos"
+                                )
+                            else:
+                                photo_video_phrase = "photos and videos"
+                            logger.info(
+                                ("Checking and downloading new %s %s to %s ..."),
+                                ",".join([_s.value for _s in user_config.sizes]),
+                                photo_video_phrase,
+                                directory,
+                            )
                         else:
                             photos_count_str = "???"
                             if user_config.skip_photos or user_config.skip_videos:
@@ -1315,13 +1340,13 @@ def core_single_run(
                                 )
                             else:
                                 photo_video_phrase = "photos and videos"
-                        logger.info(
-                            ("Downloading %s %s %s to %s ..."),
-                            photos_count_str,
-                            ",".join([_s.value for _s in user_config.sizes]),
-                            photo_video_phrase,
-                            directory,
-                        )
+                            logger.info(
+                                ("Downloading %s %s %s to %s ..."),
+                                photos_count_str,
+                                ",".join([_s.value for _s in user_config.sizes]),
+                                photo_video_phrase,
+                                directory,
+                            )
 
                         consecutive_files_found = Counter(0)
 
