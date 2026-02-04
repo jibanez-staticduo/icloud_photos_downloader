@@ -150,9 +150,9 @@ fi
 
 # Telegram webhook URL
 if [ -n "$telegram_webhook_url" ]; then
-    ARGS="$ARGS --telegram-webhook-url \"$telegram_webhook_url\""
+    ARGS="$ARGS --telegram-webhook-url $telegram_webhook_url"
 elif [ -n "$TELEGRAM_WEBHOOK_URL" ]; then
-    ARGS="$ARGS --telegram-webhook-url \"$TELEGRAM_WEBHOOK_URL\""
+    ARGS="$ARGS --telegram-webhook-url $TELEGRAM_WEBHOOK_URL"
 fi
 
 # Telegram webhook port
