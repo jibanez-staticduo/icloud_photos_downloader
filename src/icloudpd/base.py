@@ -1245,7 +1245,10 @@ def core_single_run(
                         progress.photos_to_download = photos_to_download
                         
                         # Send initial message if manual sync
-                        if telegram_bot and status_exchange.get_manual_sync():
+                        manual_sync = status_exchange.get_manual_sync()
+                        logger.debug(f"Checking manual sync: telegram_bot={telegram_bot is not None}, manual_sync={manual_sync}")
+                        if telegram_bot and manual_sync:
+                            logger.info(f"Sending Telegram sync start message: photos_to_download={photos_to_download}, total={total_photos_in_icloud}")
                             telegram_bot.send_sync_start_message(photos_to_download, total_photos_in_icloud)
                             # Mark that we should send progress updates
                             progress.last_progress_message_time = time.time()
@@ -1512,12 +1515,15 @@ def core_single_run(
                             progress = status_exchange.get_progress()
                             if telegram_bot:
                                 watch_interval = global_config.watch_with_interval or 0
+                                logger.debug(f"Checking if should send complete message: last_progress_time={progress.last_progress_message_time}, watch_interval={watch_interval}")
                                 # Send final message if manual sync OR if periodic (last_progress_message_time == 0 means periodic)
                                 if progress.last_progress_message_time > 0:
                                     # Manual sync - send final message
+                                    logger.info(f"Sending Telegram sync complete message (manual): photos_downloaded={photos_downloaded}")
                                     telegram_bot.send_sync_complete_message(photos_downloaded, watch_interval)
                                 elif watch_interval > 0:
                                     # Periodic sync - send final message (but no initial or progress messages)
+                                    logger.info(f"Sending Telegram sync complete message (periodic): photos_downloaded={photos_downloaded}")
                                     telegram_bot.send_sync_complete_message(photos_downloaded, watch_interval)
                         
                         # Update last sync time and watch interval before reset
