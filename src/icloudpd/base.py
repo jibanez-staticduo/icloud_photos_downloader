@@ -535,8 +535,9 @@ def _process_all_users_once(
                 notificator,
                 lp_filename_generator,
                 file_cache,  # Only used for sync date tracking, not for file caching
-                filename_builder,
-                telegram_bot,
+                use_cache=True,  # Always use cache unless forced full sync
+                filename_builder=filename_builder,
+                telegram_bot=telegram_bot,
             )
 
             # If any user config fails and we're not in watch mode, return the error code
