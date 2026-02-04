@@ -241,13 +241,16 @@ class TelegramBot:
             url = f"{self.base_url}/setWebhook"
             data = {"url": webhook_url}
             response = requests.post(url, data=data, timeout=10)
-            response.raise_for_status()
+            # Don't raise for status - we want to see the error details
             result = response.json()
             if result.get("ok"):
                 self.logger.info(f"Webhook configured successfully: {webhook_url}")
                 return True
             else:
-                self.logger.error(f"Failed to set webhook: {result.get('description')}")
+                error_desc = result.get('description', 'Unknown error')
+                self.logger.error(f"Failed to set webhook: {error_desc}")
+                self.logger.error(f"Webhook URL: {webhook_url}")
+                self.logger.error(f"Telegram response: {result}")
                 return False
         except Exception as e:
             self.logger.error(f"Error setting webhook: {e}")
