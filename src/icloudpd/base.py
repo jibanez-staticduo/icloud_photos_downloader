@@ -1512,20 +1512,23 @@ def core_single_run(
                             
                             # Send final message via Telegram
                             # Only send if manual sync was triggered (last_progress_message_time > 0)
-                            # OR if it's a periodic sync (always send final message for periodic)
+                            # OR if it's a periodic sync AND there are photos downloaded
                             progress = status_exchange.get_progress()
                             if telegram_bot:
                                 watch_interval = global_config.watch_with_interval or 0
-                                logger.debug(f"Checking if should send complete message: last_progress_time={progress.last_progress_message_time}, watch_interval={watch_interval}")
-                                # Send final message if manual sync OR if periodic (last_progress_message_time == 0 means periodic)
+                                logger.debug(f"Checking if should send complete message: last_progress_time={progress.last_progress_message_time}, watch_interval={watch_interval}, photos_downloaded={photos_downloaded}")
+                                # Send final message if manual sync OR if periodic with new photos
                                 if progress.last_progress_message_time > 0:
-                                    # Manual sync - send final message
+                                    # Manual sync - always send final message (even if 0 photos)
                                     logger.info(f"Sending Telegram sync complete message (manual): photos_downloaded={photos_downloaded}")
                                     telegram_bot.send_sync_complete_message(photos_downloaded, watch_interval)
-                                elif watch_interval > 0:
-                                    # Periodic sync - send final message (but no initial or progress messages)
+                                elif watch_interval > 0 and photos_downloaded > 0:
+                                    # Periodic sync - only send if there are new photos downloaded
                                     logger.info(f"Sending Telegram sync complete message (periodic): photos_downloaded={photos_downloaded}")
                                     telegram_bot.send_sync_complete_message(photos_downloaded, watch_interval)
+                                elif watch_interval > 0 and photos_downloaded == 0:
+                                    # Periodic sync with no new photos - skip notification
+                                    logger.debug(f"Skipping Telegram notification for periodic sync with 0 photos downloaded")
                         
                         # Update last sync time and watch interval before reset
                         progress = status_exchange.get_progress()
