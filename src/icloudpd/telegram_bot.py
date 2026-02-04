@@ -342,13 +342,26 @@ class TelegramBot:
 
     def send_sync_start_message(self, photos_to_download: int, total_photos: int) -> None:
         """Send sync start message with photo counts"""
-        message = f"Downloading: {photos_to_download} of {total_photos} total"
+        if photos_to_download == 0:
+            message = "🔄 Sincronización iniciada\n📊 No hay fotos nuevas para descargar"
+        else:
+            message = f"🔄 Sincronización iniciada\n📊 Procesando {total_photos} fotos en iCloud"
         self.send_message(message)
 
     def send_sync_complete_message(self, photos_downloaded: int, next_sync_seconds: int) -> None:
         """Send sync complete message"""
-        next_sync_readable = str(datetime.timedelta(seconds=next_sync_seconds))
-        message = f"Downloaded {photos_downloaded} photos. Next sync in {next_sync_readable}."
+        if next_sync_seconds > 0:
+            next_sync_readable = str(datetime.timedelta(seconds=next_sync_seconds))
+            next_sync_text = f"\n⏰ Próxima sincronización en: {next_sync_readable}"
+        else:
+            next_sync_text = ""
+        
+        if photos_downloaded == 0:
+            message = f"✅ Sincronización completada\n📥 No se descargaron fotos nuevas (todo actualizado){next_sync_text}"
+        elif photos_downloaded == 1:
+            message = f"✅ Sincronización completada\n📥 Descargada: 1 foto nueva{next_sync_text}"
+        else:
+            message = f"✅ Sincronización completada\n📥 Descargadas: {photos_downloaded} fotos nuevas{next_sync_text}"
         self.send_message(message)
 
     def _is_six_digit_code(self, text: str) -> bool:
