@@ -346,10 +346,16 @@ class TelegramBot:
     def send_sync_start_message(self, photos_to_download: int, total_photos: int) -> None:
         """Send sync start message with photo counts"""
         self.logger.info(f"Sending sync start message: photos_to_download={photos_to_download}, total={total_photos}")
-        if photos_to_download == 0:
+        # En modo incremental, photos_to_download puede ser 0 inicialmente
+        # pero aún hay que procesar fotos para verificar si hay nuevas
+        # Por eso, el mensaje inicial es genérico y el mensaje final da el conteo exacto
+        if total_photos >= 999999:
+            # Modo incremental: no sabemos cuántas fotos procesaremos hasta el final
+            message = "🔄 Sincronización iniciada\n📊 Verificando fotos nuevas en iCloud..."
+        elif photos_to_download == 0:
             message = "🔄 Sincronización iniciada\n📊 No hay fotos nuevas para descargar"
         else:
-            message = f"🔄 Sincronización iniciada\n📊 Procesando {total_photos} fotos en iCloud"
+            message = f"🔄 Sincronización iniciada\n📊 {photos_to_download} fotos para descargar"
         if self.send_message(message):
             self.logger.info("Sync start message sent successfully")
         else:
