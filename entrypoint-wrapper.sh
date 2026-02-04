@@ -1,6 +1,17 @@
 #!/bin/sh
 # Wrapper script to convert environment variables to icloudpd command line arguments
 
+# Configure keyring from /config/python_keyring/ if available
+# PlaintextKeyring looks for files in ~/.local/share/python_keyring/ by default
+KEYRING_DIR="$HOME/.local/share/python_keyring"
+if [ -f /config/python_keyring/keyring_pass.cfg ]; then
+    mkdir -p "$KEYRING_DIR"
+    if [ ! -f "$KEYRING_DIR/keyring_pass.cfg" ]; then
+        cp /config/python_keyring/keyring_pass.cfg "$KEYRING_DIR/keyring_pass.cfg"
+        echo "Keyring configured from /config/python_keyring/keyring_pass.cfg"
+    fi
+fi
+
 ARGS=""
 
 # Username (required)

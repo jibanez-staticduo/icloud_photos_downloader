@@ -428,6 +428,22 @@ def format_help_for_parser_(parser: argparse.ArgumentParser) -> str:
     return parser.format_help()
 
 
+def _get_default_password_providers() -> list[str]:
+    """Get default password providers based on environment.
+    
+    If running without a TTY (e.g., in Docker), exclude console to avoid getpass errors.
+    """
+    import sys
+    
+    # Check if stdin is a TTY
+    if sys.stdin.isatty():
+        # TTY available - can use console for password input
+        return ["parameter", "keyring", "console"]
+    else:
+        # No TTY available (Docker, cron, etc.) - skip console to avoid getpass errors
+        return ["parameter", "keyring"]
+
+
 def format_help() -> str:
     # create fake parser and return it's help
     pre_options_predicate: Callable[[str], bool] = compose(not_, partial_1_1(eq, "options:"))
@@ -562,7 +578,7 @@ def parse(args: Sequence[str]) -> Tuple[GlobalConfig, Sequence[UserConfig]]:
                 map_(
                     PasswordProvider,
                     foundation.unique_sequence(
-                        global_ns.password_providers or ["parameter", "keyring", "console"]
+                        global_ns.password_providers or _get_default_password_providers()
                     ),
                 )
             ),
