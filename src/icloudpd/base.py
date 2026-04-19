@@ -287,10 +287,18 @@ def run_with_configs(global_config: GlobalConfig, user_configs: Sequence[UserCon
                 webhook_port = ext.webhook_port
                 break
         
+        # Build extra route registrars from extensions
+        extra_route_registrars = []
+        for ext in extension_runtime._extensions:
+            if hasattr(ext, 'register_routes'):
+                # Create a partial registrar that will be called with (app, status_exchange, logger)
+                registrar = lambda app, se, lg, e=ext: e.register_routes(app, lg, se)
+                extra_route_registrars.append(registrar)
+        
         server_thread = Thread(
             target=serve_app,
             daemon=True,
-            args=[logger, shared_status_exchange, None, webhook_port],
+            args=[logger, shared_status_exchange, None, webhook_port, extra_route_registrars],
         )
         server_thread.start()
 

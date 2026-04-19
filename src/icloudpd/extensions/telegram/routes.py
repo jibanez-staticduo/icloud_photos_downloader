@@ -11,7 +11,7 @@ from ...telegram_bot import TelegramBot
 
 def register_telegram_routes(app: Flask, bot: TelegramBot, logger: Logger) -> None:
     """Register Telegram webhook routes on the Flask app."""
-
+    
     @app.route("/telegram/webhook", methods=["POST"])
     def telegram_webhook() -> Response:
         """Handle incoming Telegram webhook updates."""

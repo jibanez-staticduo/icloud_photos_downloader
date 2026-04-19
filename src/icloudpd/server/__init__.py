@@ -1,6 +1,7 @@
 import os
 import sys
 from logging import Logger
+from typing import Callable, Any
 
 import waitress
 from flask import Flask, Response, make_response, render_template, request
@@ -8,7 +9,29 @@ from flask import Flask, Response, make_response, render_template, request
 from icloudpd.status import Status, StatusExchange
 
 
-def serve_app(logger: Logger, _status_exchange: StatusExchange, telegram_bot=None, port: int = 8080) -> None:
+def register_extra_routes(
+    app: Flask,
+    extra_route_registrars: list[Callable[[Flask, Any, Logger], None]] | None,
+    logger: Logger,
+    status_exchange: StatusExchange,
+) -> None:
+    """Register extra routes from extensions."""
+    if not extra_route_registrars:
+        return
+    for registrar in extra_route_registrars:
+        try:
+            registrar(app, status_exchange, logger)
+        except Exception as e:
+            logger.error(f"Failed to register extra route: {e}")
+
+
+def serve_app(
+    logger: Logger,
+    _status_exchange: StatusExchange,
+    telegram_bot=None,
+    port: int = 8080,
+    extra_route_registrars: list[Callable[[Flask, Any, Logger], None]] | None = None,
+) -> None:
     app = Flask(__name__)
     app.logger = logger
     # for running in pyinstaller
@@ -88,19 +111,8 @@ def serve_app(logger: Logger, _status_exchange: StatusExchange, telegram_bot=Non
         _status_exchange.get_progress().cancel = True
         return make_response("Ok", 200)
 
-    # Telegram webhook endpoint (for push notifications)
-    @app.route("/telegram/webhook", methods=["POST"])
-    def telegram_webhook() -> Response:
-        if telegram_bot:
-            try:
-                update = request.get_json()
-                if update:
-                    telegram_bot.process_update(update)
-                return make_response("Ok", 200)
-            except Exception as e:
-                logger.error(f"Error processing Telegram webhook: {e}")
-                return make_response("Error", 500)
-        return make_response("Telegram bot not configured", 404)
+    # Register extra routes from extensions (e.g., Telegram webhook)
+    register_extra_routes(app, extra_route_registrars, logger, _status_exchange)
 
     logger.debug(f"Starting web server on port {port}...")
     return waitress.serve(app, host="0.0.0.0", port=port)
