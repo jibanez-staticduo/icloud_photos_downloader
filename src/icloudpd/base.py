@@ -1051,6 +1051,11 @@ def core_single_run(
                         except OSError as e:
                             logger.warning(f"Could not delete {file_path}: {e}")
             
+            # Get MFA handlers from extension runtime if available
+            mfa_handlers = None
+            if extension_runtime and hasattr(extension_runtime, '_mfa_handlers'):
+                mfa_handlers = extension_runtime._mfa_handlers
+
             icloud = authenticator(
                 logger,
                 global_config.domain,
@@ -1065,6 +1070,7 @@ def core_single_run(
                 partial(append_response, captured_responses),
                 user_config.cookie_directory,
                 os.environ.get("CLIENT_ID"),
+                mfa_handlers=mfa_handlers,
             )
 
             # dump captured responses for debugging

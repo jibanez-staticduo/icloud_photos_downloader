@@ -69,6 +69,7 @@ def authenticator(
     response_observer: Callable[[Mapping[str, Any]], None] | None = None,
     cookie_directory: str | None = None,
     client_id: str | None = None,
+    mfa_handlers: Dict[MFAProvider, Any] | None = None,
 ) -> PyiCloudService:
     """Authenticate with iCloud username and password"""
     logger.debug("Authenticating...")
@@ -104,12 +105,18 @@ def authenticator(
     if icloud.requires_2fa:
         logger.info("Two-factor authentication is required (2fa)")
         notificator()
-        if mfa_provider == MFAProvider.WEBUI:
-            request_2fa_web(icloud, logger, status_exchange)
-        elif mfa_provider == MFAProvider.TELEGRAM:
-            request_2fa_telegram(icloud, logger, status_exchange)
+        
+        # Try to use extension MFA handler if available
+        if mfa_handlers and mfa_provider in mfa_handlers:
+            handler = mfa_handlers[mfa_provider]
+            if hasattr(handler, 'handle'):
+                handler.handle(icloud, logger, status_exchange)
+            else:
+                # Fallback to old function-based approach
+                _handle_mfa_provider(mfa_provider, icloud, logger, status_exchange)
         else:
-            request_2fa(icloud, logger)
+            # Use built-in handlers
+            _handle_mfa_provider(mfa_provider, icloud, logger, status_exchange)
 
     elif icloud.requires_2sa:
         logger.info("Two-step authentication is required (2sa)")
@@ -117,6 +124,21 @@ def authenticator(
         request_2sa(icloud, logger)
 
     return icloud
+
+
+def _handle_mfa_provider(
+    mfa_provider: MFAProvider,
+    icloud: PyiCloudService,
+    logger: logging.Logger,
+    status_exchange: StatusExchange,
+) -> None:
+    """Handle MFA authentication for the given provider."""
+    if mfa_provider == MFAProvider.WEBUI:
+        request_2fa_web(icloud, logger, status_exchange)
+    elif mfa_provider == MFAProvider.TELEGRAM:
+        request_2fa_telegram(icloud, logger, status_exchange)
+    else:
+        request_2fa(icloud, logger)
 
 
 def request_2sa(icloud: PyiCloudService, logger: logging.Logger) -> None:
