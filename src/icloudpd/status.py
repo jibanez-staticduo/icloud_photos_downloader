@@ -30,8 +30,7 @@ class StatusExchange:
         self._current_user: str | None = None
         self._progress = Progress()
         self._force_full_sync = False
-        self._manual_sync = False  # True if sync was triggered manually via Telegram
-        self._telegram_bot = None  # Reference to Telegram bot for auth requests
+        self._manual_sync = False  # True if sync was triggered manually
 
     def get_status(self) -> Status:
         with self.lock:
@@ -140,13 +139,3 @@ class StatusExchange:
     def get_manual_sync(self) -> bool:
         with self.lock:
             return self._manual_sync
-
-    def set_telegram_bot(self, telegram_bot) -> None:
-        """Set Telegram bot reference for authentication requests"""
-        with self.lock:
-            self._telegram_bot = telegram_bot
-
-    def get_telegram_bot(self):
-        """Get Telegram bot reference"""
-        with self.lock:
-            return self._telegram_bot

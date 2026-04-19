@@ -100,7 +100,7 @@ def build_extension_runtime(
             webhook_url=global_config.telegram_webhook_url,
             webhook_port=global_config.telegram_webhook_port,
         )
-        # Register Telegram MFA handler
+        # Register Telegram MFA handler (will be updated with bot reference in start())
         from icloudpd.mfa_provider import MFAProvider
         mfa_handlers[MFAProvider.TELEGRAM] = TelegramMFAHandler()
 
@@ -110,12 +110,20 @@ def build_extension_runtime(
     # Build runtime with all extensions
     extensions = [ext for ext in [telegram_ext] if ext is not None]
 
-    return ExtensionRuntime(
+    runtime = ExtensionRuntime(
         extensions=extensions,
         mfa_handlers=mfa_handlers,
         sync_policy=sync_policy,
         telemetry_sink=telemetry_sink,
     )
+
+    # Link telegram bot to MFA handler after runtime is created
+    if telegram_ext:
+        for handler in mfa_handlers.values():
+            if hasattr(handler, 'set_telegram_bot'):
+                handler.set_telegram_bot(telegram_ext.bot)
+
+    return runtime
 
 
 # Convenience alias

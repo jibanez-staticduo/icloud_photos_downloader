@@ -50,8 +50,6 @@ class TelegramRuntimeExtension(RuntimeExtension):
             webhook_url=self.webhook_url,
         )
         self._bot.start_polling()
-        # Store bot reference in status_exchange for auth requests
-        status_exchange.set_telegram_bot(self._bot)
 
     def stop(self) -> None:
         """Stop the Telegram bot gracefully."""
