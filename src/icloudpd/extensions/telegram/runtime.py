@@ -3,8 +3,8 @@
 import logging
 from typing import Any
 
-from .controller import TelegramBot
-from ..contracts import RuntimeExtension
+from icloudpd.extensions.contracts import RuntimeExtension
+from icloudpd.extensions.telegram.controller import TelegramBot
 
 
 class TelegramRuntimeExtension(RuntimeExtension):
@@ -59,7 +59,7 @@ class TelegramRuntimeExtension(RuntimeExtension):
             return
 
         # Import here to avoid circular dependencies
-        from .routes import register_telegram_routes
+        from icloudpd.extensions.telegram.routes import register_telegram_routes
 
         register_telegram_routes(app, self._bot, logger)
 

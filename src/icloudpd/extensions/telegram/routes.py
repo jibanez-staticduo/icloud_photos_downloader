@@ -6,7 +6,7 @@ This moves the /telegram/webhook route out of the core server module.
 from flask import Flask, Response, make_response, request
 from logging import Logger
 
-from .controller import TelegramBot
+from icloudpd.extensions.telegram.controller import TelegramBot
 
 
 def register_telegram_routes(app: Flask, bot: TelegramBot, logger: Logger) -> None:

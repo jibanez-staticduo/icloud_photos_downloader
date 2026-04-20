@@ -31,6 +31,8 @@ class StatusExchange:
         self._progress = Progress()
         self._force_full_sync = False
         self._manual_sync = False  # True if sync was triggered manually
+        self._auth_mode_requested = False
+        self._auth_notification_sent = False
 
     def get_status(self) -> Status:
         with self.lock:
@@ -139,3 +141,22 @@ class StatusExchange:
     def get_manual_sync(self) -> bool:
         with self.lock:
             return self._manual_sync
+
+    def request_auth_mode(self) -> None:
+        with self.lock:
+            self._auth_mode_requested = True
+            self._auth_notification_sent = False
+
+    def consume_auth_mode_request(self) -> bool:
+        with self.lock:
+            requested = self._auth_mode_requested
+            self._auth_mode_requested = False
+            return requested
+
+    def set_auth_notification_sent(self, sent: bool) -> None:
+        with self.lock:
+            self._auth_notification_sent = sent
+
+    def get_auth_notification_sent(self) -> bool:
+        with self.lock:
+            return self._auth_notification_sent

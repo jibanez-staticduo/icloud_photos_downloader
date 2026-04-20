@@ -1,9 +1,9 @@
 """Telegram extension module."""
 
-from .controller import TelegramBot
-from .mfa import TelegramMFAHandler
-from .routes import register_telegram_routes
-from .runtime import TelegramRuntimeExtension
+from icloudpd.extensions.telegram.controller import TelegramBot
+from icloudpd.extensions.telegram.mfa import TelegramMFAHandler
+from icloudpd.extensions.telegram.routes import register_telegram_routes
+from icloudpd.extensions.telegram.runtime import TelegramRuntimeExtension
 
 __all__ = [
     "TelegramBot",

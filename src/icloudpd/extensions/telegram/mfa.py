@@ -6,8 +6,8 @@ This wraps the old request_2fa_telegram function and implements the MFAHandler c
 import logging
 from typing import Any
 
-from ...authentication import request_2fa_telegram
-from ..contracts import MFAHandler
+from icloudpd.authentication import request_2fa_telegram
+from icloudpd.extensions.contracts import MFAHandler
 
 
 class TelegramMFAHandler(MFAHandler):

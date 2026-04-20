@@ -8,7 +8,7 @@ import os
 import time
 from typing import Any
 
-from .contracts import TelemetrySink
+from icloudpd.extensions.contracts import TelemetrySink
 
 
 class FileTelemetrySink:

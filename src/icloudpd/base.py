@@ -7,6 +7,7 @@ import itertools
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -103,6 +104,32 @@ def build_filename_cleaner(keep_unicode: bool) -> Callable[[str], str]:
     else:
         # Apply unicode removal in addition to basic cleaning
         return remove_unicode_chars
+
+
+def _clear_auth_session(logger: logging.Logger, user_config: UserConfig) -> None:
+    """Back up and delete cookie/session files for a fresh login flow."""
+    cookie_dir = user_config.cookie_directory or os.path.expanduser("~/.pyicloud")
+    import re
+
+    cookie_filename = "".join([c for c in user_config.username if re.match(r"\w", c)])
+    cookie_path = os.path.join(cookie_dir, cookie_filename)
+    session_path = cookie_path + ".session"
+    backup_dir = os.path.join(cookie_dir, "auth-backups")
+    backup_stamp = time.strftime("%Y%m%d-%H%M%S")
+
+    os.makedirs(backup_dir, exist_ok=True)
+
+    for file_path in [cookie_path, session_path]:
+        if os.path.exists(file_path):
+            try:
+                backup_name = f"{os.path.basename(file_path)}.{backup_stamp}.bak"
+                backup_path = os.path.join(backup_dir, backup_name)
+                shutil.copy2(file_path, backup_path)
+                logger.info(f"Backed up {file_path} to {backup_path}")
+                os.remove(file_path)
+                logger.info(f"Deleted {file_path} to force re-authentication")
+            except OSError as error:
+                logger.warning(f"Could not back up or delete {file_path}: {error}")
 
 
 def lp_filename_concatinator(filename: str) -> str:
@@ -1022,24 +1049,14 @@ def core_single_run(
             # Get Telegram bot from extension runtime if available
             telegram_bot = extension_runtime.telegram_bot if extension_runtime else None
 
-            # Check if authentication was requested via Telegram /auth command
-            # If so, delete cookies to force re-authentication
-            if telegram_bot and hasattr(telegram_bot, '_auth_requested') and telegram_bot._auth_requested:
-                telegram_bot._auth_requested = False  # Reset flag
-                cookie_dir = user_config.cookie_directory or os.path.expanduser("~/.pyicloud")
-                # Delete cookie and session files to force re-authentication
-                # Cookie file name is based on username (alphanumeric characters only)
-                import re
-                cookie_filename = "".join([c for c in user_config.username if re.match(r'\w', c)])
-                cookie_path = os.path.join(cookie_dir, cookie_filename)
-                session_path = cookie_path + ".session"
-                for file_path in [cookie_path, session_path]:
-                    if os.path.exists(file_path):
-                        try:
-                            os.remove(file_path)
-                            logger.info(f"Deleted {file_path} to force re-authentication")
-                        except OSError as e:
-                            logger.warning(f"Could not delete {file_path}: {e}")
+            auth_mode_requested = status_exchange.consume_auth_mode_request()
+            if auth_mode_requested and telegram_bot and hasattr(telegram_bot, "_auth_requested"):
+                telegram_bot._auth_requested = False
+
+            if auth_mode_requested:
+                logger.info("Telegram /auth requested, forcing a fresh login flow")
+                _clear_auth_session(logger, user_config)
+                status_exchange.set_auth_notification_sent(False)
             
             # Get MFA handlers from extension runtime if available
             mfa_handlers = extension_runtime.mfa_handlers if extension_runtime else None
@@ -1069,6 +1086,7 @@ def core_single_run(
 
             if user_config.auth_only:
                 logger.info("Authentication completed successfully")
+                status_exchange.set_auth_notification_sent(False)
                 return 0
 
             elif user_config.list_libraries:
@@ -1515,6 +1533,7 @@ def core_single_run(
                         # Reset full-sync flag after completing the requested sync attempt (success or cancel),
                         # so subsequent scheduled runs don't unexpectedly stay in full-sync mode.
                         status_exchange.set_force_full_sync(False)
+                        status_exchange.set_auth_notification_sent(False)
                         progress.reset()
 
                     if user_config.auto_delete:
@@ -1552,12 +1571,12 @@ def core_single_run(
         except PyiCloud2SARequiredException as error:
             logger.info(str(error))
             dump_responses(logger.debug, captured_responses)
-            # Notify via Telegram if available
-            if telegram_bot:
+            # Notify via Telegram if available, but do not force the auth flow.
+            if telegram_bot and not status_exchange.get_auth_notification_sent():
                 username = user_config.username
                 telegram_bot.notify_auth_required(username)
-            # Continue to retry authentication (will detect requires_2fa and use Telegram if configured)
-            continue
+                status_exchange.set_auth_notification_sent(True)
+            return 0
         except (
             PyiCloudServiceNotActivatedException,
             PyiCloudServiceUnavailableException,
@@ -1568,13 +1587,11 @@ def core_single_run(
             dump_responses(logger.debug, captured_responses)
             # Check if it's an authentication error (421, 450, 500)
             if isinstance(error, PyiCloudAPIResponseException) and str(error.code) in ["421", "450", "500"]:
-                # Authentication required - notify via Telegram if available
-                if telegram_bot:
+                if telegram_bot and not status_exchange.get_auth_notification_sent():
                     username = user_config.username
                     telegram_bot.notify_auth_required(username)
-                # Continue to retry authentication (will detect requires_2fa and use Telegram if configured)
-                if global_config.mfa_provider == MFAProvider.TELEGRAM and telegram_bot:
-                    continue
+                    status_exchange.set_auth_notification_sent(True)
+                return 0
             # webui will display error and wait for password again
             if (
                 PasswordProvider.WEBUI in global_config.password_providers

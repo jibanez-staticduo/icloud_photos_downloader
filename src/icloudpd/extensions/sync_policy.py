@@ -10,8 +10,8 @@ This encapsulates the logic for:
 import datetime
 from typing import Any
 
-from ...file_cache import FileCache
-from ..contracts import SyncPolicy
+from icloudpd.file_cache import FileCache
+from icloudpd.extensions.contracts import SyncPolicy
 
 
 class IncrementalSyncPolicy(SyncPolicy):

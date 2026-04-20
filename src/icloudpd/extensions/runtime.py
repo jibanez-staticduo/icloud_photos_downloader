@@ -5,8 +5,8 @@ from typing import Any, Callable, Sequence
 
 from flask import Flask
 
-from .contracts import MFAHandler, RuntimeExtension, SyncPolicy, TelemetrySink
-from .telemetry import FileTelemetrySink, set_telemetry_sink
+from icloudpd.extensions.contracts import MFAHandler, RuntimeExtension, SyncPolicy, TelemetrySink
+from icloudpd.extensions.telemetry import FileTelemetrySink, set_telemetry_sink
 
 
 class ExtensionRuntime:
@@ -110,9 +110,9 @@ def build_extension_runtime(
     This is the main factory function that creates all extensions
     based on the configuration.
     """
-    from .telegram.mfa import TelegramMFAHandler
-    from .telegram.runtime import TelegramRuntimeExtension
-    from .sync_policy import IncrementalSyncPolicy
+    from icloudpd.extensions.sync_policy import IncrementalSyncPolicy
+    from icloudpd.extensions.telegram.mfa import TelegramMFAHandler
+    from icloudpd.extensions.telegram.runtime import TelegramRuntimeExtension
 
     # Build telemetry sink
     telemetry_sink = FileTelemetrySink()

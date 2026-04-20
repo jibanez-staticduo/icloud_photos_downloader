@@ -9,7 +9,7 @@ from typing import Optional
 
 import requests
 
-from ...status import StatusExchange, Status
+from icloudpd.status import Status, StatusExchange
 
 
 class TelegramBot:
@@ -394,7 +394,8 @@ class TelegramBot:
         progress = self.status_exchange.get_progress()
         progress.resume = True
         progress.cancel = False
-        # Set flag to force authentication (will be handled in base.py)
+        self.status_exchange.request_auth_mode()
+        # Kept for backward compatibility with older flow in base.py.
         self._auth_requested = True
         self._waiting_for_auth_code = False  # Reset flag, will be set when MFA is required
 
