@@ -77,6 +77,11 @@ icloudpd --username my@email.address --password my_password --auth-only
 > [!TIP]
 > This feature can also be used to check and verify that the session is still authenticated. 
 
+## Private Registry Deployment
+
+This fork can also be published to a private Docker registry and deployed from there.
+See `DEPLOY_REGISTRY.md` for the workflow used with `docker.staticduo.com/icloudpd`.
+
 ## Contributing
 
 Want to contribute to iCloud Photos Downloader? Awesome! Check out the [contributing guidelines](CONTRIBUTING.md) to get involved.

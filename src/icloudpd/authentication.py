@@ -69,6 +69,7 @@ def authenticator(
     response_observer: Callable[[Mapping[str, Any]], None] | None = None,
     cookie_directory: str | None = None,
     client_id: str | None = None,
+    mfa_handlers: Dict[MFAProvider, Any] | None = None,
 ) -> PyiCloudService:
     """Authenticate with iCloud username and password"""
     logger.debug("Authenticating...")
@@ -104,12 +105,18 @@ def authenticator(
     if icloud.requires_2fa:
         logger.info("Two-factor authentication is required (2fa)")
         notificator()
-        if mfa_provider == MFAProvider.WEBUI:
-            request_2fa_web(icloud, logger, status_exchange)
-        elif mfa_provider == MFAProvider.TELEGRAM:
-            request_2fa_telegram(icloud, logger, status_exchange)
+        
+        # Try to use extension MFA handler if available
+        if mfa_handlers and mfa_provider in mfa_handlers:
+            handler = mfa_handlers[mfa_provider]
+            if hasattr(handler, 'handle'):
+                handler.handle(icloud, logger, status_exchange)
+            else:
+                # Fallback to old function-based approach
+                _handle_mfa_provider(mfa_provider, icloud, logger, status_exchange)
         else:
-            request_2fa(icloud, logger)
+            # Use built-in handlers
+            _handle_mfa_provider(mfa_provider, icloud, logger, status_exchange)
 
     elif icloud.requires_2sa:
         logger.info("Two-step authentication is required (2sa)")
@@ -117,6 +124,21 @@ def authenticator(
         request_2sa(icloud, logger)
 
     return icloud
+
+
+def _handle_mfa_provider(
+    mfa_provider: MFAProvider,
+    icloud: PyiCloudService,
+    logger: logging.Logger,
+    status_exchange: StatusExchange,
+) -> None:
+    """Handle MFA authentication for the given provider."""
+    if mfa_provider == MFAProvider.WEBUI:
+        request_2fa_web(icloud, logger, status_exchange)
+    elif mfa_provider == MFAProvider.TELEGRAM:
+        request_2fa_telegram(icloud, logger, status_exchange)
+    else:
+        request_2fa(icloud, logger)
 
 
 def request_2sa(icloud: PyiCloudService, logger: logging.Logger) -> None:
@@ -286,7 +308,10 @@ def request_2fa_web(
 
 
 def request_2fa_telegram(
-    icloud: PyiCloudService, logger: logging.Logger, status_exchange: StatusExchange
+    icloud: PyiCloudService,
+    logger: logging.Logger,
+    status_exchange: StatusExchange,
+    telegram_bot: Any = None,
 ) -> None:
     """Request two-factor authentication through Telegram."""
     if not status_exchange.replace_status(Status.NO_INPUT_NEEDED, Status.NEED_MFA):
@@ -294,16 +319,14 @@ def request_2fa_telegram(
             f"Expected NO_INPUT_NEEDED, but got {status_exchange.get_status()}"
         )
 
-    # Get telegram bot from status_exchange if available
-    telegram_bot = status_exchange.get_telegram_bot()
-    if telegram_bot:
-        username = status_exchange.get_current_user() or "user"
-        telegram_bot.request_auth_code(username)
-    else:
+    if not telegram_bot:
         logger.warning("Telegram bot not available, falling back to console")
         # Fallback to console if Telegram bot not available
         request_2fa(icloud, logger)
         return
+
+    username = status_exchange.get_current_user() or "user"
+    telegram_bot.request_auth_code(username)
 
     # wait for input
     while True:
@@ -324,15 +347,13 @@ def request_2fa_telegram(
             if not icloud.validate_2fa_code(code):
                 if status_exchange.set_error("Failed to verify two-factor authentication code"):
                     # Reset waiting flag and request code again
-                    if telegram_bot:
-                        telegram_bot.request_auth_code(username)
+                    telegram_bot.request_auth_code(username)
                     continue
                 else:
                     raise PyiCloudFailedMFAException("Failed to change status of invalid code")
             else:
                 status_exchange.replace_status(Status.CHECKING_MFA, Status.NO_INPUT_NEEDED)  # done
-                if telegram_bot:
-                    telegram_bot.send_message("✅ Authentication completed successfully")
+                telegram_bot.send_message("Authentication completed successfully")
                 logger.info(
                     "Great, you're all set up. The script can now be run without "
                     "user interaction until 2FA expires.\n"

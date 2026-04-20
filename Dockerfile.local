@@ -1,5 +1,5 @@
-# Dockerfile para construir desde el código fuente local
-# Construye los binarios y luego crea la imagen final en un solo paso
+# Dockerfile para construir una imagen publicable desde el checkout local.
+# Construye los binarios y luego crea la imagen final en un solo paso.
 FROM python:3.13-alpine3.19 AS builder
 WORKDIR /app
 RUN apk update && \
@@ -30,6 +30,5 @@ RUN chmod +x /app/icloud /app/icloudpd
 COPY entrypoint-wrapper.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 ENV TZ=UTC
-EXPOSE 8080
+EXPOSE 8080 48080
 ENTRYPOINT ["/app/entrypoint.sh"]
-

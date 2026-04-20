@@ -27,3 +27,7 @@ node_modules/
 .cookies/
 
 .claude/
+.cursor/
+*.code-workspace
+pr_preparation/
+src/icloudpd/telegram_bot.py.backup

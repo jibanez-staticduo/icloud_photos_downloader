@@ -7,6 +7,7 @@ import itertools
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -45,6 +46,7 @@ from icloudpd.autodelete import autodelete_photos
 from icloudpd.config import GlobalConfig, UserConfig
 from icloudpd.counter import Counter
 from icloudpd.email_notifications import send_2sa_notification
+from icloudpd.extensions.runtime import build as build_extension_runtime
 from icloudpd.filename_policies import build_filename_with_policies, create_filename_builder
 from icloudpd.file_cache import FileCache
 from icloudpd.log_level import LogLevel
@@ -102,6 +104,32 @@ def build_filename_cleaner(keep_unicode: bool) -> Callable[[str], str]:
     else:
         # Apply unicode removal in addition to basic cleaning
         return remove_unicode_chars
+
+
+def _clear_auth_session(logger: logging.Logger, user_config: UserConfig) -> None:
+    """Back up and delete cookie/session files for a fresh login flow."""
+    cookie_dir = user_config.cookie_directory or os.path.expanduser("~/.pyicloud")
+    import re
+
+    cookie_filename = "".join([c for c in user_config.username if re.match(r"\w", c)])
+    cookie_path = os.path.join(cookie_dir, cookie_filename)
+    session_path = cookie_path + ".session"
+    backup_dir = os.path.join(cookie_dir, "auth-backups")
+    backup_stamp = time.strftime("%Y%m%d-%H%M%S")
+
+    os.makedirs(backup_dir, exist_ok=True)
+
+    for file_path in [cookie_path, session_path]:
+        if os.path.exists(file_path):
+            try:
+                backup_name = f"{os.path.basename(file_path)}.{backup_stamp}.bak"
+                backup_path = os.path.join(backup_dir, backup_name)
+                shutil.copy2(file_path, backup_path)
+                logger.info(f"Backed up {file_path} to {backup_path}")
+                os.remove(file_path)
+                logger.info(f"Deleted {file_path} to force re-authentication")
+            except OSError as error:
+                logger.warning(f"Could not back up or delete {file_path}: {error}")
 
 
 def lp_filename_concatinator(filename: str) -> str:
@@ -260,46 +288,28 @@ def run_with_configs(global_config: GlobalConfig, user_configs: Sequence[UserCon
     # Create shared status exchange for web server and progress tracking
     shared_status_exchange = StatusExchange()
 
+    # Build extension runtime from config
+    extension_runtime = build_extension_runtime(global_config, logger)
+
     # Check if any user needs web server (webui for MFA or passwords)
     needs_web_server = global_config.mfa_provider == MFAProvider.WEBUI or any(
         provider == PasswordProvider.WEBUI for provider in global_config.password_providers
     )
 
-    # Start Telegram bot if configured (before web server to pass it if needed)
-    telegram_bot = None
-    # Start bot if polling is enabled OR webhook is configured
-    if (global_config.telegram_polling or global_config.telegram_webhook_url) and global_config.telegram_token and global_config.telegram_chat_id:
-        from icloudpd.telegram_bot import TelegramBot
-        telegram_bot = TelegramBot(
-            logger,
-            global_config.telegram_token,
-            global_config.telegram_chat_id,
-            shared_status_exchange,
-            global_config.telegram_polling_interval,
-            global_config.telegram_webhook_url,
-        )
-        telegram_bot.start_polling()
-        # Store telegram bot reference in status_exchange for auth requests
-        shared_status_exchange.set_telegram_bot(telegram_bot)
+    # Start all runtime extensions (Telegram bot, etc.)
+    extension_runtime.start(logger, global_config, shared_status_exchange)
 
-    # Start web server ONCE if needed, outside all loops
-    # Pass telegram_bot if available for webhook support
-    # Use webhook port if Telegram webhook is configured, otherwise default port 8080
-    webhook_port = (
-        global_config.telegram_webhook_port
-        if telegram_bot and telegram_bot.webhook_url
-        else 8080
-    )
-    # Start web server if needed for WebUI OR if Telegram webhook is configured
-    if needs_web_server or (telegram_bot and telegram_bot.webhook_url):
+    # Start web server once if WebUI or any extension needs HTTP routes.
+    extra_route_registrars = extension_runtime.extra_route_registrars()
+    if needs_web_server or extra_route_registrars:
         if needs_web_server:
-            logger.info(f"Starting web server for WebUI authentication on port {webhook_port}...")
-        if telegram_bot and telegram_bot.webhook_url:
-            logger.info(f"Starting web server for Telegram webhooks on port {webhook_port}...")
+            logger.info(f"Starting web server for WebUI authentication on port 8080...")
+        webhook_port = extension_runtime.web_server_port(8080)
+
         server_thread = Thread(
             target=serve_app,
             daemon=True,
-            args=[logger, shared_status_exchange, telegram_bot, webhook_port],
+            args=[logger, shared_status_exchange, webhook_port, extra_route_registrars],
         )
         server_thread.start()
 
@@ -314,8 +324,13 @@ def run_with_configs(global_config: GlobalConfig, user_configs: Sequence[UserCon
         shared_status_exchange.get_progress().last_sync_time = time.time()
 
     if not watch_interval:
-        # No watch mode - process each user once and exit
-        return _process_all_users_once(global_config, user_configs, logger, shared_status_exchange, telegram_bot)
+        try:
+            # No watch mode - process each user once and exit
+            return _process_all_users_once(
+                global_config, user_configs, logger, shared_status_exchange, extension_runtime
+            )
+        finally:
+            extension_runtime.stop()
     else:
         # Watch mode - infinite loop processing all users, then wait
         skip_bar = not os.environ.get("FORCE_TQDM") and (
@@ -324,58 +339,62 @@ def run_with_configs(global_config: GlobalConfig, user_configs: Sequence[UserCon
             or not sys.stdout.isatty()
         )
 
-        while True:
-            # Check if resume was requested before processing (might have been set while waiting)
-            if shared_status_exchange.get_progress().resume:
-                logger.info("Sync requested, starting immediately...")
-                shared_status_exchange.get_progress().resume = False  # Clear resume flag
-            
-            # Process all user configs in this iteration
-            result = _process_all_users_once(
-                global_config, user_configs, logger, shared_status_exchange, telegram_bot
-            )
-
-            # If any critical operation (auth-only, list commands) succeeded, exit
-            if result == 0:
-                first_user = user_configs[0] if user_configs else None
-                if first_user and (
-                    first_user.auth_only or first_user.list_albums or first_user.list_libraries
-                ):
-                    return 0
-
-            # Wait for the watch interval before next iteration
-            # Clear current user during wait period to avoid misleading UI
-            shared_status_exchange.clear_current_user()
-            logger.info(f"Waiting for {watch_interval} sec...")
-            interval: Sequence[int] = range(1, watch_interval)
-            iterable: Sequence[int] = (
-                interval
-                if skip_bar
-                else typing.cast(
-                    Sequence[int],
-                    tqdm(
-                        iterable=interval,
-                        desc="Waiting...",
-                        ascii=True,
-                        leave=False,
-                        dynamic_ncols=True,
-                    ),
-                )
-            )
-            for counter in iterable:
-                # Update shared status exchange with wait progress
-                shared_status_exchange.get_progress().waiting = watch_interval - counter
+        try:
+            while True:
+                # Check if resume was requested before processing (might have been set while waiting)
                 if shared_status_exchange.get_progress().resume:
-                    logger.info("Sync requested, breaking wait loop...")
+                    logger.info("Sync requested, starting immediately...")
                     shared_status_exchange.get_progress().resume = False  # Clear resume flag
-                    shared_status_exchange.get_progress().waiting = 0  # Clear waiting
-                    break
-                time.sleep(1)
-            
-            # Check if resume was requested (might have been set while processing)
-            if shared_status_exchange.get_progress().resume:
-                logger.info("Sync requested, starting immediately...")
-                shared_status_exchange.get_progress().resume = False  # Clear resume flag
+                
+                # Process all user configs in this iteration
+                result = _process_all_users_once(
+                    global_config, user_configs, logger, shared_status_exchange, extension_runtime
+                )
+
+                # If any critical operation (auth-only, list commands) succeeded, exit
+                if result == 0:
+                    first_user = user_configs[0] if user_configs else None
+                    if first_user and (
+                        first_user.auth_only or first_user.list_albums or first_user.list_libraries
+                    ):
+                        return 0
+
+                # Wait for the watch interval before next iteration
+                # Clear current user during wait period to avoid misleading UI
+                shared_status_exchange.clear_current_user()
+                logger.info(f"Waiting for {watch_interval} sec...")
+                interval: Sequence[int] = range(1, watch_interval)
+                iterable: Sequence[int] = (
+                    interval
+                    if skip_bar
+                    else typing.cast(
+                        Sequence[int],
+                        tqdm(
+                            iterable=interval,
+                            desc="Waiting...",
+                            ascii=True,
+                            leave=False,
+                            dynamic_ncols=True,
+                        ),
+                    )
+                )
+                for counter in iterable:
+                    # Update shared status exchange with wait progress
+                    shared_status_exchange.get_progress().waiting = watch_interval - counter
+                    if shared_status_exchange.get_progress().resume:
+                        logger.info("Sync requested, breaking wait loop...")
+                        shared_status_exchange.get_progress().resume = False  # Clear resume flag
+                        shared_status_exchange.get_progress().waiting = 0  # Clear waiting
+                        break
+                    time.sleep(1)
+                
+                # Check if resume was requested (might have been set while processing)
+                if shared_status_exchange.get_progress().resume:
+                    logger.info("Sync requested, starting immediately...")
+                    shared_status_exchange.get_progress().resume = False  # Clear resume flag
+        finally:
+            # Stop all extensions on exit
+            extension_runtime.stop()
 
 
 def _process_all_users_once(
@@ -383,7 +402,7 @@ def _process_all_users_once(
     user_configs: Sequence[UserConfig],
     logger: logging.Logger,
     shared_status_exchange: StatusExchange,
-    telegram_bot: Optional[Any] = None,
+    extension_runtime: Any = None,
 ) -> int:
     """Process all user configs once (used by both single run and watch mode)"""
 
@@ -537,7 +556,7 @@ def _process_all_users_once(
                 file_cache,  # Only used for sync date tracking, not for file caching
                 use_cache=True,  # Always use cache unless forced full sync
                 filename_builder=filename_builder,
-                telegram_bot=telegram_bot,
+                extension_runtime=extension_runtime,
             )
 
             # If any user config fails and we're not in watch mode, return the error code
@@ -1011,7 +1030,7 @@ def core_single_run(
     file_cache: FileCache | None = None,
     use_cache: bool = True,
     filename_builder: Callable[[PhotoAsset], str] | None = None,
-    telegram_bot: Optional[Any] = None,
+    extension_runtime: Any = None,
 ) -> int:
     """Download all iCloud photos to a local directory for a single execution (no watch loop)"""
 
@@ -1027,25 +1046,21 @@ def core_single_run(
             captured.append(response)
 
         try:
-            # Check if authentication was requested via Telegram /auth command
-            # If so, delete cookies to force re-authentication
-            if telegram_bot and hasattr(telegram_bot, '_auth_requested') and telegram_bot._auth_requested:
-                telegram_bot._auth_requested = False  # Reset flag
-                cookie_dir = user_config.cookie_directory or os.path.expanduser("~/.pyicloud")
-                # Delete cookie and session files to force re-authentication
-                # Cookie file name is based on username (alphanumeric characters only)
-                import re
-                cookie_filename = "".join([c for c in user_config.username if re.match(r'\w', c)])
-                cookie_path = os.path.join(cookie_dir, cookie_filename)
-                session_path = cookie_path + ".session"
-                for file_path in [cookie_path, session_path]:
-                    if os.path.exists(file_path):
-                        try:
-                            os.remove(file_path)
-                            logger.info(f"Deleted {file_path} to force re-authentication")
-                        except OSError as e:
-                            logger.warning(f"Could not delete {file_path}: {e}")
+            # Get Telegram bot from extension runtime if available
+            telegram_bot = extension_runtime.telegram_bot if extension_runtime else None
+
+            auth_mode_requested = status_exchange.consume_auth_mode_request()
+            if auth_mode_requested and telegram_bot and hasattr(telegram_bot, "_auth_requested"):
+                telegram_bot._auth_requested = False
+
+            if auth_mode_requested:
+                logger.info("Telegram /auth requested, forcing a fresh login flow")
+                _clear_auth_session(logger, user_config)
+                status_exchange.set_auth_notification_sent(False)
             
+            # Get MFA handlers from extension runtime if available
+            mfa_handlers = extension_runtime.mfa_handlers if extension_runtime else None
+
             icloud = authenticator(
                 logger,
                 global_config.domain,
@@ -1060,6 +1075,7 @@ def core_single_run(
                 partial(append_response, captured_responses),
                 user_config.cookie_directory,
                 os.environ.get("CLIENT_ID"),
+                mfa_handlers=mfa_handlers,
             )
 
             # dump captured responses for debugging
@@ -1070,6 +1086,7 @@ def core_single_run(
 
             if user_config.auth_only:
                 logger.info("Authentication completed successfully")
+                status_exchange.set_auth_notification_sent(False)
                 return 0
 
             elif user_config.list_libraries:
@@ -1141,84 +1158,44 @@ def core_single_run(
                     def sum_(inp: Iterable[int]) -> int:
                         return sum(inp)
 
-                    max_added_date_seen_ts_all: float | None = None
-                    
-                    # OPTIMIZATION: Apply addedDate filter BEFORE calculating photos_count
-                    # This ensures we only count photos that match the filter
-                    # Filter by addedDate if not doing full sync and we have a last sync date
-                    # Use 1 day margin to account for timing differences (photo added to device vs uploaded to iCloud)
+                    # Use sync policy from extension runtime if available
                     incremental_sync_active = False
-                    # #region agent log
-                    import json
-                    try:
-                        with open("/app/src/.cursor/debug.log", "a") as logf:
-                            logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1,H5","location":"base.py:1149","message":"checking incremental sync conditions","data":{"file_cache_exists":file_cache is not None,"force_full_sync":status_exchange.get_force_full_sync()},"timestamp":int(time.time()*1000)})+"\n")
-                    except: pass
-                    # #endregion
-                    if file_cache is not None and not status_exchange.get_force_full_sync():
-                        last_sync_timestamp = file_cache.get_last_sync_date()
-                        # #region agent log
-                        try:
-                            with open("/app/src/.cursor/debug.log", "a") as logf:
-                                logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1","location":"base.py:1151","message":"got last_sync_timestamp","data":{"last_sync_timestamp":last_sync_timestamp},"timestamp":int(time.time()*1000)})+"\n")
-                        except: pass
-                        # #endregion
-                        if last_sync_timestamp:
-                            # Subtract 1 day (86400 seconds) as margin for timing differences
-                            margin_seconds = 86400  # 1 day
-                            last_sync_with_margin = last_sync_timestamp - margin_seconds
-                            
-                            # Add filter for addedDate >= (last_sync_date - 1 day)
-                            # Convert timestamp (seconds) to milliseconds (what iCloud uses)
-                            added_date_ms = int(last_sync_with_margin * 1000)
-                            
-                            # Create filter - try GREATER_THAN_OR_EQUALS first (CloudKit standard)
-                            # If that doesn't work, we can fall back to GREATER_THAN
-                            added_date_filter = {
-                                "fieldName": "addedDate",
-                                "fieldValue": {"type": "INT64", "value": added_date_ms},
-                                "comparator": "GREATER_THAN_OR_EQUALS",
-                            }
-                            
-                            # #region agent log
-                            try:
-                                with open("/app/src/.cursor/debug.log", "a") as logf:
-                                    logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1,H2","location":"base.py:1163","message":"created added_date_filter","data":{"added_date_filter":added_date_filter,"added_date_ms":added_date_ms,"last_sync_with_margin":last_sync_with_margin},"timestamp":int(time.time()*1000)})+"\n")
-                            except: pass
-                            # #endregion
-                            
-                            # Apply filter to all albums BEFORE counting
-                            for photo_album in albums:
-                                if photo_album.query_filter is None:
-                                    photo_album.query_filter = [added_date_filter]
-                                else:
-                                    # Add to existing filters
-                                    photo_album.query_filter = list(photo_album.query_filter) + [added_date_filter]
-                            
-                            # #region agent log
-                            try:
-                                with open("/app/src/.cursor/debug.log", "a") as logf:
-                                    logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1","location":"base.py:1175","message":"applied filter to albums","data":{"num_albums":len(albums)},"timestamp":int(time.time()*1000)})+"\n")
-                            except: pass
-                            # #endregion
-                            
-                            last_sync_readable = datetime.datetime.fromtimestamp(last_sync_timestamp).strftime("%Y-%m-%d %H:%M:%S")
-                            margin_readable = datetime.datetime.fromtimestamp(last_sync_with_margin).strftime("%Y-%m-%d %H:%M:%S")
-                            logger.info(f"🔄 INCREMENTAL SYNC: Filtering photos added since {margin_readable} (last sync: {last_sync_readable}, 1 day margin)")
-                            incremental_sync_active = True
-                        else:
-                            logger.info("🔄 FULL SYNC: No previous sync date found, processing all photos (first sync)")
+                    sync_policy = extension_runtime.sync_policy if extension_runtime else None
+                    
+                    if sync_policy:
+                        # Apply sync policy to prepare albums (e.g., add incremental filters)
+                        incremental_sync_active = sync_policy.prepare_albums(
+                            albums, file_cache, status_exchange, logger
+                        )
+                    else:
+                        # Fallback to old behavior if no sync policy available
+                        if file_cache is not None and not status_exchange.get_force_full_sync():
+                            last_sync_timestamp = file_cache.get_last_sync_date()
+                            if last_sync_timestamp:
+                                margin_seconds = 86400
+                                last_sync_with_margin = last_sync_timestamp - margin_seconds
+                                added_date_ms = int(last_sync_with_margin * 1000)
+                                added_date_filter = {
+                                    "fieldName": "addedDate",
+                                    "fieldValue": {"type": "INT64", "value": added_date_ms},
+                                    "comparator": "GREATER_THAN_OR_EQUALS",
+                                }
+                                for photo_album in albums:
+                                    if photo_album.query_filter is None:
+                                        photo_album.query_filter = [added_date_filter]
+                                    else:
+                                        photo_album.query_filter = list(photo_album.query_filter) + [added_date_filter]
+                                last_sync_readable = datetime.datetime.fromtimestamp(last_sync_timestamp).strftime("%Y-%m-%d %H:%M:%S")
+                                margin_readable = datetime.datetime.fromtimestamp(last_sync_with_margin).strftime("%Y-%m-%d %H:%M:%S")
+                                logger.info(f"🔄 INCREMENTAL SYNC: Filtering photos added since {margin_readable} (last sync: {last_sync_readable}, 1 day margin)")
+                                incremental_sync_active = True
+                            else:
+                                logger.info("🔄 FULL SYNC: No previous sync date found, processing all photos (first sync)")
                     
                     # Calculate photos_count AFTER applying filters
                     # This gives us the actual number of photos that will be processed
                     photos_count: int | None = compose(sum_, album_lengths)(albums)
                     total_photos_in_icloud = photos_count if photos_count is not None else 0
-                    # #region agent log
-                    try:
-                        with open("/app/src/.cursor/debug.log", "a") as logf:
-                            logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1","location":"base.py:1186","message":"photos_count after filter","data":{"photos_count":photos_count,"total_photos_in_icloud":total_photos_in_icloud,"incremental_sync_active":incremental_sync_active},"timestamp":int(time.time()*1000)})+"\n")
-                    except: pass
-                    # #endregion
                     # Show user-friendly message (999999 means "unknown count with filter")
                     if total_photos_in_icloud >= 999999:
                         logger.info("Found photos in iCloud (incremental sync - counting as we go...)")
@@ -1399,25 +1376,12 @@ def core_single_run(
                                 try:
                                     item_added_ts = item.added_date.timestamp()
                                     if (
-                                        max_added_date_seen_ts_all is None
-                                        or item_added_ts > max_added_date_seen_ts_all
+                                        sync_policy
                                     ):
-                                        max_added_date_seen_ts_all = item_added_ts
-                                        # #region agent log
-                                        if photos_processed_count % 100 == 0 or photos_processed_count <= 5:
-                                            try:
-                                                with open("/app/src/.cursor/debug.log", "a") as logf:
-                                                    logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H3","location":"base.py:1336","message":"processing photo","data":{"photos_processed_count":photos_processed_count,"item_added_ts":item_added_ts,"max_added_date_seen_ts_all":max_added_date_seen_ts_all},"timestamp":int(time.time()*1000)})+"\n")
-                                            except: pass
-                                        # #endregion
+                                        # Let sync policy track max addedDate
+                                        sync_policy.on_item_seen(item)
                                 except Exception as e:
                                     # addedDate should be present, but don't let this break downloads
-                                    # #region agent log
-                                    try:
-                                        with open("/app/src/.cursor/debug.log", "a") as logf:
-                                            logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H3","location":"base.py:1343","message":"error getting added_date","data":{"error":str(e)},"timestamp":int(time.time()*1000)})+"\n")
-                                    except: pass
-                                    # #endregion
                                     pass
 
                                 passer_result = passer(item)
@@ -1561,49 +1525,15 @@ def core_single_run(
                         if global_config.watch_with_interval:
                             progress.watch_interval = global_config.watch_with_interval
                             progress.last_sync_time = current_time
-                        # Save last sync date for incremental syncs (even without watch mode).
-                        # Use iCloud's own `addedDate` (max seen) instead of local clock time.
-                        # Only update on successful completion (not cancelled) and only when we
-                        # fully processed the selection (i.e., no --recent/--until-found limits).
-                        # #region agent log
-                        try:
-                            with open("/app/src/.cursor/debug.log", "a") as logf:
-                                logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H3","location":"base.py:1465","message":"checking save last_sync_date conditions","data":{"file_cache_exists":file_cache is not None,"cancel":status_exchange.get_progress().cancel,"recent":user_config.recent,"until_found":user_config.until_found,"max_added_date_seen_ts_all":max_added_date_seen_ts_all,"photos_processed_count":photos_processed_count},"timestamp":int(time.time()*1000)})+"\n")
-                        except: pass
-                        # #endregion
-                        if (
-                            file_cache is not None
-                            and not status_exchange.get_progress().cancel
-                            and user_config.recent is None
-                            and user_config.until_found is None
-                        ):
-                            if max_added_date_seen_ts_all is not None:
-                                file_cache.set_last_sync_date(max_added_date_seen_ts_all)
-                                # #region agent log
-                                try:
-                                    with open("/app/src/.cursor/debug.log", "a") as logf:
-                                        logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H3","location":"base.py:1472","message":"saved last_sync_date","data":{"max_added_date_seen_ts_all":max_added_date_seen_ts_all,"readable":datetime.datetime.fromtimestamp(max_added_date_seen_ts_all).strftime("%Y-%m-%d %H:%M:%S")},"timestamp":int(time.time()*1000)})+"\n")
-                                except: pass
-                                # #endregion
-                                logger.info(
-                                    "Saved last sync date (iCloud addedDate): %s (next sync will only process new photos)",
-                                    datetime.datetime.fromtimestamp(max_added_date_seen_ts_all).strftime(
-                                        "%Y-%m-%d %H:%M:%S"
-                                    ),
-                                )
-                            else:
-                                # #region agent log
-                                try:
-                                    with open("/app/src/.cursor/debug.log", "a") as logf:
-                                        logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H3","location":"base.py:1481","message":"max_added_date_seen_ts_all is None","data":{},"timestamp":int(time.time()*1000)})+"\n")
-                                except: pass
-                                # #endregion
-                                logger.debug(
-                                    "No photos were listed in this run; keeping previous last sync date unchanged."
-                                )
+                        
+                        # Use sync policy to finalize and save last sync date.
+                        if sync_policy:
+                            sync_policy.finalize(file_cache, status_exchange, user_config, logger)
+                        
                         # Reset full-sync flag after completing the requested sync attempt (success or cancel),
                         # so subsequent scheduled runs don't unexpectedly stay in full-sync mode.
                         status_exchange.set_force_full_sync(False)
+                        status_exchange.set_auth_notification_sent(False)
                         progress.reset()
 
                     if user_config.auto_delete:
@@ -1641,12 +1571,12 @@ def core_single_run(
         except PyiCloud2SARequiredException as error:
             logger.info(str(error))
             dump_responses(logger.debug, captured_responses)
-            # Notify via Telegram if available
-            if telegram_bot:
+            # Notify via Telegram if available, but do not force the auth flow.
+            if telegram_bot and not status_exchange.get_auth_notification_sent():
                 username = user_config.username
                 telegram_bot.notify_auth_required(username)
-            # Continue to retry authentication (will detect requires_2fa and use Telegram if configured)
-            continue
+                status_exchange.set_auth_notification_sent(True)
+            return 0
         except (
             PyiCloudServiceNotActivatedException,
             PyiCloudServiceUnavailableException,
@@ -1657,13 +1587,11 @@ def core_single_run(
             dump_responses(logger.debug, captured_responses)
             # Check if it's an authentication error (421, 450, 500)
             if isinstance(error, PyiCloudAPIResponseException) and str(error.code) in ["421", "450", "500"]:
-                # Authentication required - notify via Telegram if available
-                if telegram_bot:
+                if telegram_bot and not status_exchange.get_auth_notification_sent():
                     username = user_config.username
                     telegram_bot.notify_auth_required(username)
-                # Continue to retry authentication (will detect requires_2fa and use Telegram if configured)
-                if global_config.mfa_provider == MFAProvider.TELEGRAM and telegram_bot:
-                    continue
+                    status_exchange.set_auth_notification_sent(True)
+                return 0
             # webui will display error and wait for password again
             if (
                 PasswordProvider.WEBUI in global_config.password_providers
