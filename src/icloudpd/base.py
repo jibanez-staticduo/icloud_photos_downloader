@@ -272,33 +272,17 @@ def run_with_configs(global_config: GlobalConfig, user_configs: Sequence[UserCon
     # Start all runtime extensions (Telegram bot, etc.)
     extension_runtime.start(logger, global_config, shared_status_exchange)
 
-    # Start web server ONCE if needed, outside all loops
-    # Register extension routes (e.g., Telegram webhook)
-    if needs_web_server or extension_runtime._extensions:
+    # Start web server once if WebUI or any extension needs HTTP routes.
+    extra_route_registrars = extension_runtime.extra_route_registrars()
+    if needs_web_server or extra_route_registrars:
         if needs_web_server:
             logger.info(f"Starting web server for WebUI authentication on port 8080...")
-        # Register routes from extensions
-        extension_runtime.register_routes(None, logger, shared_status_exchange)
-        
-        # Determine port (extensions may have configured webhook port)
-        webhook_port = 8080
-        for ext in extension_runtime._extensions:
-            if hasattr(ext, 'webhook_port'):
-                webhook_port = ext.webhook_port
-                break
-        
-        # Build extra route registrars from extensions
-        extra_route_registrars = []
-        for ext in extension_runtime._extensions:
-            if hasattr(ext, 'register_routes'):
-                # Create a partial registrar that will be called with (app, status_exchange, logger)
-                registrar = lambda app, se, lg, e=ext: e.register_routes(app, lg, se)
-                extra_route_registrars.append(registrar)
-        
+        webhook_port = extension_runtime.web_server_port(8080)
+
         server_thread = Thread(
             target=serve_app,
             daemon=True,
-            args=[logger, shared_status_exchange, None, webhook_port, extra_route_registrars],
+            args=[logger, shared_status_exchange, webhook_port, extra_route_registrars],
         )
         server_thread.start()
 
@@ -313,10 +297,13 @@ def run_with_configs(global_config: GlobalConfig, user_configs: Sequence[UserCon
         shared_status_exchange.get_progress().last_sync_time = time.time()
 
     if not watch_interval:
-        # No watch mode - process each user once and exit
-        return _process_all_users_once(
-            global_config, user_configs, logger, shared_status_exchange, extension_runtime
-        )
+        try:
+            # No watch mode - process each user once and exit
+            return _process_all_users_once(
+                global_config, user_configs, logger, shared_status_exchange, extension_runtime
+            )
+        finally:
+            extension_runtime.stop()
     else:
         # Watch mode - infinite loop processing all users, then wait
         skip_bar = not os.environ.get("FORCE_TQDM") and (
@@ -1033,12 +1020,7 @@ def core_single_run(
 
         try:
             # Get Telegram bot from extension runtime if available
-            telegram_bot = None
-            if extension_runtime:
-                for ext in extension_runtime._extensions:
-                    if hasattr(ext, 'bot'):
-                        telegram_bot = ext.bot
-                        break
+            telegram_bot = extension_runtime.telegram_bot if extension_runtime else None
 
             # Check if authentication was requested via Telegram /auth command
             # If so, delete cookies to force re-authentication
@@ -1060,9 +1042,7 @@ def core_single_run(
                             logger.warning(f"Could not delete {file_path}: {e}")
             
             # Get MFA handlers from extension runtime if available
-            mfa_handlers = None
-            if extension_runtime and hasattr(extension_runtime, '_mfa_handlers'):
-                mfa_handlers = extension_runtime._mfa_handlers
+            mfa_handlers = extension_runtime.mfa_handlers if extension_runtime else None
 
             icloud = authenticator(
                 logger,
@@ -1167,7 +1147,7 @@ def core_single_run(
                     if sync_policy:
                         # Apply sync policy to prepare albums (e.g., add incremental filters)
                         incremental_sync_active = sync_policy.prepare_albums(
-                            albums, file_cache, shared_status_exchange, logger
+                            albums, file_cache, status_exchange, logger
                         )
                     else:
                         # Fallback to old behavior if no sync policy available
@@ -1198,12 +1178,6 @@ def core_single_run(
                     # This gives us the actual number of photos that will be processed
                     photos_count: int | None = compose(sum_, album_lengths)(albums)
                     total_photos_in_icloud = photos_count if photos_count is not None else 0
-                    # #region agent log
-                    try:
-                        with open("/app/src/.cursor/debug.log", "a") as logf:
-                            logf.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1","location":"base.py:1186","message":"photos_count after filter","data":{"photos_count":photos_count,"total_photos_in_icloud":total_photos_in_icloud,"incremental_sync_active":incremental_sync_active},"timestamp":int(time.time()*1000)})+"\n")
-                    except: pass
-                    # #endregion
                     # Show user-friendly message (999999 means "unknown count with filter")
                     if total_photos_in_icloud >= 999999:
                         logger.info("Found photos in iCloud (incremental sync - counting as we go...)")
@@ -1534,19 +1508,9 @@ def core_single_run(
                             progress.watch_interval = global_config.watch_with_interval
                             progress.last_sync_time = current_time
                         
-                        # Use sync policy to finalize and save last sync date
+                        # Use sync policy to finalize and save last sync date.
                         if sync_policy:
                             sync_policy.finalize(file_cache, status_exchange, user_config, logger)
-                        else:
-                            # Fallback to old behavior if no sync policy available
-                            if (
-                                file_cache is not None
-                                and not status_exchange.get_progress().cancel
-                                and user_config.recent is None
-                                and user_config.until_found is None
-                            ):
-                                # Old logic would go here, but we're relying on sync_policy now
-                                logger.debug("No sync policy available, skipping last sync date save")
                         
                         # Reset full-sync flag after completing the requested sync attempt (success or cancel),
                         # so subsequent scheduled runs don't unexpectedly stay in full-sync mode.

@@ -1,13 +1,12 @@
-"""Runtime extension manager that coordinates all extensions.
-
-This is the main entry point for extension lifecycle management.
-"""
+"""Runtime extension manager that coordinates all extensions."""
 
 import logging
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
-from .contracts import RuntimeExtension, MFAHandler, SyncPolicy, TelemetrySink
-from .telemetry import get_telemetry_sink, set_telemetry_sink, FileTelemetrySink
+from flask import Flask
+
+from .contracts import MFAHandler, RuntimeExtension, SyncPolicy, TelemetrySink
+from .telemetry import FileTelemetrySink, set_telemetry_sink
 
 
 class ExtensionRuntime:
@@ -16,7 +15,7 @@ class ExtensionRuntime:
     def __init__(
         self,
         extensions: Sequence[RuntimeExtension] | None = None,
-        mfa_handlers: dict | None = None,
+        mfa_handlers: dict[Any, MFAHandler] | None = None,
         sync_policy: SyncPolicy | None = None,
         telemetry_sink: TelemetrySink | None = None,
     ) -> None:
@@ -37,6 +36,12 @@ class ExtensionRuntime:
             except Exception as e:
                 logger.error(f"Failed to start extension {ext}: {e}")
 
+        telegram_bot = self.telegram_bot
+        if telegram_bot is not None:
+            for handler in self._mfa_handlers.values():
+                if hasattr(handler, "set_telegram_bot"):
+                    handler.set_telegram_bot(telegram_bot)
+
     def stop(self) -> None:
         """Stop all runtime extensions."""
         for ext in self._extensions:
@@ -46,17 +51,44 @@ class ExtensionRuntime:
                 # Log but don't fail on stop errors
                 logging.getLogger(__name__).error(f"Failed to stop extension {ext}: {e}")
 
-    def register_routes(self, app: Any, logger: Any, status_exchange: Any) -> None:
-        """Register routes from all extensions."""
-        for ext in self._extensions:
-            try:
-                ext.register_routes(app, logger, status_exchange)
-            except Exception as e:
-                logger.error(f"Failed to register routes for extension {ext}: {e}")
+    @property
+    def mfa_handlers(self) -> dict[Any, MFAHandler]:
+        """Expose configured MFA handlers."""
+        return self._mfa_handlers
 
-    def get_mfa_handler(self, provider: Any) -> MFAHandler | None:
-        """Get MFA handler for the given provider."""
-        return self._mfa_handlers.get(provider)
+    @property
+    def extensions(self) -> Sequence[RuntimeExtension]:
+        """Expose configured runtime extensions."""
+        return tuple(self._extensions)
+
+    @property
+    def telegram_bot(self) -> Any:
+        """Return the first extension bot, if available."""
+        for ext in self._extensions:
+            bot = getattr(ext, "bot", None)
+            if bot is not None:
+                return bot
+        return None
+
+    def extra_route_registrars(self) -> list[Callable[[Flask, Any, Any], None]]:
+        """Build registrars for extensions that actually need web routes."""
+        registrars: list[Callable[[Flask, Any, Any], None]] = []
+        for ext in self._extensions:
+            if not getattr(ext, "needs_web_routes", False):
+                continue
+
+            def registrar(app: Flask, status_exchange: Any, logger: Any, extension: Any = ext) -> None:
+                extension.register_routes(app, logger, status_exchange)
+
+            registrars.append(registrar)
+        return registrars
+
+    def web_server_port(self, default: int = 8080) -> int:
+        """Return the preferred web server port for enabled route extensions."""
+        for ext in self._extensions:
+            if getattr(ext, "needs_web_routes", False):
+                return getattr(ext, "webhook_port", default)
+        return default
 
     @property
     def sync_policy(self) -> SyncPolicy | None:
@@ -78,11 +110,9 @@ def build_extension_runtime(
     This is the main factory function that creates all extensions
     based on the configuration.
     """
-    from .contracts import RuntimeExtension
-    from .extensions.telegram.runtime import TelegramRuntimeExtension
-    from .extensions.telegram.mfa import TelegramMFAHandler
-    from .extensions.sync_policy import IncrementalSyncPolicy
-    from .extensions.telemetry import FileTelemetrySink
+    from .telegram.mfa import TelegramMFAHandler
+    from .telegram.runtime import TelegramRuntimeExtension
+    from .sync_policy import IncrementalSyncPolicy
 
     # Build telemetry sink
     telemetry_sink = FileTelemetrySink()
@@ -110,20 +140,12 @@ def build_extension_runtime(
     # Build runtime with all extensions
     extensions = [ext for ext in [telegram_ext] if ext is not None]
 
-    runtime = ExtensionRuntime(
+    return ExtensionRuntime(
         extensions=extensions,
         mfa_handlers=mfa_handlers,
         sync_policy=sync_policy,
         telemetry_sink=telemetry_sink,
     )
-
-    # Link telegram bot to MFA handler after runtime is created
-    if telegram_ext:
-        for handler in mfa_handlers.values():
-            if hasattr(handler, 'set_telegram_bot'):
-                handler.set_telegram_bot(telegram_ext.bot)
-
-    return runtime
 
 
 # Convenience alias

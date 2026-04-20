@@ -1,13 +1,9 @@
-"""Telegram runtime extension that wraps the old TelegramBot.
-
-This is a thin adapter that implements the RuntimeExtension contract.
-The actual bot logic is still in src/icloudpd/telegram_bot.py for now.
-"""
+"""Telegram runtime extension backed by the Telegram controller."""
 
 import logging
 from typing import Any
 
-from ...telegram_bot import TelegramBot
+from .controller import TelegramBot
 from ..contracts import RuntimeExtension
 
 
@@ -76,3 +72,8 @@ class TelegramRuntimeExtension(RuntimeExtension):
     def is_configured(self) -> bool:
         """Check if Telegram is configured."""
         return bool(self.token and self.chat_id and (self.polling or self.webhook_url))
+
+    @property
+    def needs_web_routes(self) -> bool:
+        """Return whether this extension needs HTTP route registration."""
+        return bool(self.webhook_url)

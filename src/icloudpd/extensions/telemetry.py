@@ -16,7 +16,6 @@ class FileTelemetrySink:
 
     def __init__(self, filepath: str | None = None) -> None:
         self.filepath = filepath or "/app/src/.cursor/debug.log"
-        self._ensure_dir()
 
     def _ensure_dir(self) -> None:
         """Ensure the directory for the telemetry file exists."""
@@ -27,6 +26,7 @@ class FileTelemetrySink:
     def emit(self, event: str, **data: Any) -> None:
         """Emit a telemetry event as JSON."""
         try:
+            self._ensure_dir()
             payload = {
                 "sessionId": "debug-session",
                 "runId": "run1",
@@ -35,7 +35,7 @@ class FileTelemetrySink:
                 "data": data,
                 "timestamp": int(time.time() * 1000),
             }
-            with open(self.filepath, "a") as f:
+            with open(self.filepath, "a", encoding="utf8") as f:
                 f.write(json.dumps(payload) + "\n")
         except Exception:
             # Silently fail - telemetry should never break the main flow

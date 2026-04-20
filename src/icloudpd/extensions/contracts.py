@@ -29,6 +29,11 @@ class RuntimeExtension(Protocol):
         """Register additional Flask routes on the web server."""
         ...
 
+    @property
+    def needs_web_routes(self) -> bool:
+        """Whether this extension needs web route registration."""
+        ...
+
 
 class MFAHandler(Protocol):
     """Handler for MFA authentication flow."""

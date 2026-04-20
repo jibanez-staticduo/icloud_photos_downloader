@@ -28,7 +28,6 @@ def register_extra_routes(
 def serve_app(
     logger: Logger,
     _status_exchange: StatusExchange,
-    telegram_bot=None,
     port: int = 8080,
     extra_route_registrars: list[Callable[[Flask, Any, Logger], None]] | None = None,
 ) -> None:
