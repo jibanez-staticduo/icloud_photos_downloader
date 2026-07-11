@@ -1,0 +1,5 @@
+COMMANDS:
+docker compose -f /volume2/docker/icloudpd/docker-compose.yaml pull icloudpd
+docker compose -f /volume2/docker/icloudpd/docker-compose.yaml up -d icloudpd
+RESULT: PASS
+Service pulled, recreated, started.

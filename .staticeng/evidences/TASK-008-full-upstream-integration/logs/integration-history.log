@@ -1,0 +1,32 @@
+*   3f114d6 (HEAD -> task-008-upstream-integration) Merge remote-tracking branch 'upstream/master' into task-008-upstream-integration
+|\  
+| * 9857dd8 (tag: v1.32.3, upstream/master) fix: update build dependencies for Python 3.13/Trixie compatibility
+| *   d0e7d25 Merge pull request #1344 from icloud-photos-downloader/fix/webui-2fa-push-notification
+| |\  
+| | * 106e8cf (upstream/fix/webui-2fa-push-notification) build: update Dockerfile.build
+| | * d8eaf47 build: include Dockerfile.build-musl update for ARM32v7 test environment
+| | * 5333495 build: fix ARM32v7 staticx install path
+| | * 17584f7 build: apply updated Dockerfile.build changes
+| | * 3e48438 build: ensure setuptools and wheel are installed before staticx
+| | * 67abe4a fix: add 2FA push notification trigger for WebUI (pr-1335 followup)
+| |/  
+| * 452ce8e Test for PR-1335
+| *   0b5e917 Merge pull request #1335 from eukos:fix/2fa-auth
+| |\  
+| | * a20050f fix: restore 2FA for Apple's updated auth flow (2026+)
+| |/  
+* |   8ccf4a3 (origin/master, origin/HEAD, master) merge: incorporar refactor de telegram y despliegue registry
+|\ \  
+| * | bfdf729 refactor: finalize auth flow and registry deployment
+| * | 8aca9ee refactor: fix extension runtime regressions and cleanup artifacts
+| * | e98183e refactor: clean up debug.log telemetry blocks from photos.py
+| * | 1770785 refactor: remove Telegram references from core and clean status.py
+| * | ef1a850 refactor: move TelegramBot to extensions and add route registration
+| * | dca3764 refactor: integrate MFA handler extension in authentication
+| * | 72772bf refactor: introduce extension system for Telegram and sync policy
+|/ /  
+* | 4a83567 Fix: Mensajes de log más claros en sincronización incremental
+* | 1a98f88 Fix: No enviar notificación Telegram en sync periódica sin fotos nuevas
+* | f6ffd39 Fix: Mejorar mensaje inicial de sincronización en modo incremental
+* | 59d601e Fix: Corregir orden de parámetros en llamada a core_single_run - telegram_bot no se pasaba correctamente
+* | 414d3f1 Agregar logging detallado para debuguear mensajes de Telegram

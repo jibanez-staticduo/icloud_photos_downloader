@@ -1,0 +1,76 @@
+diff --git a/src/icloudpd/authentication.py b/src/icloudpd/authentication.py
+index 73c4a04..bae15e1 100644
+--- a/src/icloudpd/authentication.py
++++ b/src/icloudpd/authentication.py
+@@ -12,6 +12,10 @@ from pyicloud_ipd.base import PyiCloudService
+ from pyicloud_ipd.exceptions import PyiCloudFailedMFAException
+ 
+ 
++class TelegramAuthRestartRequested(PyiCloudFailedMFAException):
++    """Raised when the user requests a fresh Telegram auth attempt."""
++
++
+ def prompt_int_range(message: str, default: str, min_val: int, max_val: int) -> int:
+     """Prompt user for integer input within a range, similar to click.IntRange"""
+     while True:
+@@ -72,7 +76,7 @@ def authenticator(
+     mfa_handlers: Dict[MFAProvider, Any] | None = None,
+ ) -> PyiCloudService:
+     """Authenticate with iCloud username and password"""
+-    logger.debug("Authenticating...")
++    logger.info("Authenticating...")
+     valid_password: List[str] = []
+ 
+     def password_provider(username: str, valid_password: List[str]) -> str | None:
+@@ -345,10 +349,30 @@ def request_2fa_telegram(
+         return
+ 
+     username = status_exchange.get_current_user() or "user"
++    status_exchange.clear_auth_restart_request()
++    try:
++        push_triggered = icloud.trigger_push_notification()
++    except Exception as exc:  # noqa: BLE001 - priming must not hide Telegram MFA recovery.
++        logger.warning(
++            "Unable to trigger Apple two-factor push before Telegram code request; "
++            "continuing with Telegram MFA prompt: %s",
++            exc,
++        )
++    else:
++        if not push_triggered:
++            logger.debug("Failed to trigger 2FA push notification, continuing anyway")
++        else:
++            logger.debug("2FA push notification triggered")
+     telegram_bot.request_auth_code(username)
+ 
+     # wait for input
+     while True:
++        if status_exchange.auth_restart_requested():
++            status_exchange.consume_auth_restart_request()
++            logger.info("Telegram /auth restart requested while waiting for MFA code")
++            status_exchange.replace_status(Status.NEED_MFA, Status.NO_INPUT_NEEDED)
++            raise TelegramAuthRestartRequested("Telegram authentication restart requested")
++
+         status = status_exchange.get_status()
+         if status == Status.NEED_MFA:
+             time.sleep(1)
+@@ -364,6 +388,12 @@ def request_2fa_telegram(
+                 )
+ 
+             if not icloud.validate_2fa_code(code):
++                if status_exchange.auth_restart_requested():
++                    status_exchange.consume_auth_restart_request()
++                    logger.info("Telegram /auth restart requested during MFA verification")
++                    status_exchange.replace_status(Status.CHECKING_MFA, Status.NO_INPUT_NEEDED)
++                    raise TelegramAuthRestartRequested("Telegram authentication restart requested")
++
+                 if status_exchange.set_error("Failed to verify two-factor authentication code"):
+                     # Reset waiting flag and request code again
+                     telegram_bot.request_auth_code(username)
+@@ -372,6 +402,7 @@ def request_2fa_telegram(
+                     raise PyiCloudFailedMFAException("Failed to change status of invalid code")
+             else:
+                 status_exchange.replace_status(Status.CHECKING_MFA, Status.NO_INPUT_NEEDED)  # done
++                status_exchange.clear_auth_restart_request()
+                 telegram_bot.send_message("Authentication completed successfully")
+                 logger.info(
+                     "Great, you're all set up. The script can now be run without "

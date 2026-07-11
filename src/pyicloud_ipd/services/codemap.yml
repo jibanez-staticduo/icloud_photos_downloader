@@ -1,0 +1,5 @@
+scope: module
+parent: ../../../.staticeng/codemap.yml
+internals:
+  - path: __init__.py
+  - path: photos.py

@@ -1,0 +1,17 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.2, pytest-9.0.3, pluggy-1.6.0
+rootdir: /home/staticduo/git/icloud_photos_downloader
+configfile: pyproject.toml
+plugins: cov-7.1.0, recording-0.13.4, requests-mock-1.12.1
+collected 14 items
+
+tests/test_telegram_auth.py ..............                               [100%]
+
+=============================== warnings summary ===============================
+../../../../tmp/opencode/icloudpd-main-validation-venv/lib/python3.11/site-packages/_pytest/config/__init__.py:1434
+  /tmp/opencode/icloudpd-main-validation-venv/lib/python3.11/site-packages/_pytest/config/__init__.py:1434: PytestConfigWarning: Unknown config option: timeout
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 14 passed, 1 warning in 1.33s =========================

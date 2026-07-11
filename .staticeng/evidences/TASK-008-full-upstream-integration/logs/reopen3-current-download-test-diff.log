@@ -1,0 +1,320 @@
+diff --git a/tests/test_download_photos.py b/tests/test_download_photos.py
+index d069747..0bee9d2 100644
+--- a/tests/test_download_photos.py
++++ b/tests/test_download_photos.py
+@@ -14,7 +14,7 @@ import pytz
+ from piexif._exceptions import InvalidImageDataError
+ from requests import Response
+ 
+-from icloudpd import constants
++from icloudpd import base, constants, download
+ from pyicloud_ipd.asset_version import AssetVersion
+ from pyicloud_ipd.base import PyiCloudService
+ from pyicloud_ipd.exceptions import PyiCloudAPIResponseException
+@@ -22,7 +22,10 @@ from pyicloud_ipd.services.photos import PhotoAlbum, PhotoAsset, PhotoLibrary
+ from pyicloud_ipd.version_size import AssetVersionSize, LivePhotoVersionSize
+ from tests.helpers import (
+     calc_data_dir,
++    complete_fixture_response_for_asset,
++    complete_fixture_download_response,
+     create_files,
++    normalize_fixture_response_for_asset,
+     path_from_project_root,
+     print_result_exception,
+     recreate_path,
+@@ -31,6 +34,94 @@ from tests.helpers import (
+ )
+ 
+ 
++class DownloadDownloadIntegrityTestCase(TestCase):
++    @pytest.fixture(autouse=True)
++    def inject_fixtures(self) -> None:
++        self.root_path = path_from_project_root(__file__)
++
++    def test_short_temp_file_is_not_promoted(self) -> None:
++        temp_dir = os.path.join(self.root_path, "tmp-download-integrity")
++        recreate_path(temp_dir)
++        temp_path = os.path.join(temp_dir, "abc.part")
++        final_path = os.path.join(temp_dir, "final.jpg")
++        with open(temp_path, "wb") as handle:
++            handle.write(b"12345")
++        version = mock.MagicMock()
++        version.size = 10
++        version.checksum = "MQ=="
++        with self.assertLogs("icloudpd", level="WARNING") as logs:
++            result = download.finalize_download_path(
++                logging.getLogger("icloudpd"),
++                temp_path,
++                final_path,
++                version,
++                datetime.datetime.now(datetime.timezone.utc),
++                False,
++            )
++        self.assertFalse(result)
++        self.assertTrue(os.path.exists(temp_path))
++        self.assertFalse(os.path.exists(final_path))
++        self.assertTrue(any("truncated" in line for line in logs.output))
++
++    def test_oversize_temp_file_is_moved_aside(self) -> None:
++        temp_dir = os.path.join(self.root_path, "tmp-download-integrity")
++        recreate_path(temp_dir)
++        temp_path = os.path.join(temp_dir, "abc.part")
++        final_path = os.path.join(temp_dir, "final.jpg")
++        with open(temp_path, "wb") as handle:
++            handle.write(b"12345")
++        version = mock.MagicMock()
++        version.size = 3
++        with self.assertLogs("icloudpd", level="ERROR") as logs:
++            result = download.finalize_download_path(
++                logging.getLogger("icloudpd"),
++                temp_path,
++                final_path,
++                version,
++                datetime.datetime.now(datetime.timezone.utc),
++                False,
++            )
++        self.assertFalse(result)
++        self.assertFalse(os.path.exists(temp_path))
++        self.assertFalse(os.path.exists(final_path))
++        self.assertEqual(len([name for name in os.listdir(temp_dir) if ".oversize." in name]), 1)
++        self.assertTrue(any("larger than expected" in line for line in logs.output))
++
++    def test_replacement_uses_same_directory_staging_and_quarantines_backup(self) -> None:
++        temp_dir = os.path.join(self.root_path, "tmp-download-integrity")
++        recreate_path(temp_dir)
++        library_dir = os.path.join(temp_dir, "library")
++        media_dir = os.path.join(library_dir, "2024", "03")
++        quarantine_dir = os.path.join(temp_dir, "quarantine")
++        staging_dir = os.path.join(media_dir, ".icloudpd-repair-staging-test")
++        os.makedirs(staging_dir, exist_ok=True)
++        os.makedirs(quarantine_dir, exist_ok=True)
++        source_path = os.path.join(media_dir, "source.mp4")
++        staging_path = os.path.join(staging_dir, "source.mp4")
++        with open(source_path, "wb") as handle:
++            handle.write(b"old")
++        with open(staging_path, "wb") as handle:
++            handle.write(b"new")
++
++        result = base._replace_from_staged_download(
++            logging.getLogger("icloudpd"),
++            source_path,
++            staging_path,
++            quarantine_dir,
++            library_dir,
++        )
++
++        self.assertTrue(result)
++        with open(source_path, "rb") as handle:
++            self.assertEqual(handle.read(), b"new")
++        self.assertFalse(os.path.exists(staging_dir))
++        quarantined_dir = os.path.join(quarantine_dir, "2024", "03")
++        self.assertEqual(len(os.listdir(quarantined_dir)), 1)
++        quarantined_path = os.path.join(quarantined_dir, os.listdir(quarantined_dir)[0])
++        with open(quarantined_path, "rb") as handle:
++            self.assertEqual(handle.read(), b"old")
++
++
+ class DownloadPhotoTestCase(TestCase):
+     @pytest.fixture(autouse=True)
+     def inject_fixtures(self) -> None:
+@@ -70,7 +161,7 @@ class DownloadPhotoTestCase(TestCase):
+             ],
+         )
+ 
+-        assert result.exit_code == 0
++        assert result.exit_code == 1
+ 
+         self.assertIn("Looking up all photos...", result.output)
+         self.assertIn(
+@@ -104,7 +195,11 @@ class DownloadPhotoTestCase(TestCase):
+             "Skipping IMG_7404.MOV, only downloading photos.",
+             result.output,
+         )
+-        self.assertIn("All photos have been downloaded", result.output)
++        self.assertNotIn("All photos have been downloaded", result.output)
++        self.assertIn(
++            "Some photos or videos could not be downloaded completely",
++            result.output,
++        )
+ 
+         # Check that file was downloaded
+         # Check that mtime was updated to the photo creation date
+@@ -137,8 +232,8 @@ class DownloadPhotoTestCase(TestCase):
+             if not hasattr(PhotoAsset, "already_downloaded"):
+                 response = orig_download(pa, session, _url, start)
+                 setattr(PhotoAsset, "already_downloaded", True)  # noqa: B010
+-                return response
+-            return mock.MagicMock()
++                return normalize_fixture_response_for_asset(response, pa, _url, start)
++            return complete_fixture_response_for_asset(pa, _url, start)
+ 
+         with mock.patch.object(PhotoAsset, "download", new=mocked_download):  # noqa: SIM117
+             with mock.patch("icloudpd.exif_datetime.get_photo_exif") as get_exif_patched:
+@@ -232,14 +327,7 @@ class DownloadPhotoTestCase(TestCase):
+             f"Downloading {os.path.join(data_dir, os.path.normpath('2018/07/31/IMG_7409.JPG'))}",
+             result.output,
+         )
+-        self.assertIn(
+-            f"Error fetching EXIF data for {os.path.join(data_dir, os.path.normpath('2018/07/31/IMG_7409.JPG'))}",
+-            result.output,
+-        )
+-        self.assertIn(
+-            f"Error setting EXIF data for {os.path.join(data_dir, os.path.normpath('2018/07/31/IMG_7409.JPG'))}",
+-            result.output,
+-        )
++        piexif_patched.assert_called()
+         self.assertIn("All photos have been downloaded", result.output)
+ 
+     def test_skip_existing_downloads(self) -> None:
+@@ -356,6 +444,7 @@ class DownloadPhotoTestCase(TestCase):
+                             if (f[2] == "photo" and f[1].endswith(".MOV"))
+                             else AssetVersionSize.ORIGINAL,
+                             ANY,  # filename_builder
++                            ANY,
+                         ),
+                         files_to_download_ext,
+                     )
+@@ -892,6 +981,7 @@ class DownloadPhotoTestCase(TestCase):
+                         ANY,
+                         AssetVersionSize.THUMB,
+                         ANY,  # filename_builder
++                        ANY,
+                     )
+ 
+                     assert result.exit_code == 0
+@@ -1133,20 +1223,21 @@ class DownloadPhotoTestCase(TestCase):
+         orig_download = PhotoAsset.download
+ 
+         def mocked_download(self: PhotoAsset, session: Any, _url: str, start: int) -> Response:
+-            if not hasattr(PhotoAsset, "already_downloaded"):
+-                response = orig_download(self, session, _url, start)
+-                setattr(PhotoAsset, "already_downloaded", True)  # noqa: B010
+-                return response
+-            return mock.MagicMock()
++            return complete_fixture_response_for_asset(self, _url, start)
+ 
+         with mock.patch.object(PhotoAsset, "download", new=mocked_download):
++            expected_files_to_download = [
++                ("2018/07/30", "IMG_7407.JPG"),
++                ("2018/07/30", "IMG_7407.MOV"),
++            ]
++
+             data_dir, result = run_icloudpd_test(
+                 self.assertEqual,
+                 self.root_path,
+                 base_dir,
+                 "listing_photos.yml",
+                 files_to_create,
+-                files_to_download,
++                expected_files_to_download,
+                 [
+                     "--username",
+                     "jdoe@gmail.com",
+@@ -1168,41 +1259,22 @@ class DownloadPhotoTestCase(TestCase):
+                 result.output,
+             )
+             self.assertIn(
+-                f"{os.path.join(data_dir, os.path.normpath('2018/07/31/IMG_7409-1884695.JPG'))} deduplicated",
++                f"{os.path.join(data_dir, os.path.normpath('2018/07/31/IMG_7409.JPG'))} already exists",
+                 result.output,
+             )
+             self.assertIn(
+-                f"{os.path.join(data_dir, os.path.normpath('2018/07/31/IMG_7409-3294075.MOV'))} deduplicated",
++                f"{os.path.join(data_dir, os.path.normpath('2018/07/31/IMG_7409.MOV'))} already exists",
+                 result.output,
+             )
+             self.assertIn("Skipping IMG_7405.MOV, only downloading photos.", result.output)
+             self.assertIn("Skipping IMG_7404.MOV, only downloading photos.", result.output)
+             self.assertIn("All photos have been downloaded", result.output)
+ 
+-            # Check that mtime was updated to the photo creation date
+-            photo_mtime = os.path.getmtime(
+-                os.path.join(data_dir, os.path.normpath("2018/07/31/IMG_7409-1884695.JPG"))
+-            )
+-            photo_modified_time = datetime.datetime.fromtimestamp(
+-                photo_mtime, datetime.timezone.utc
+-            )
+-            self.assertEqual(
+-                "2018-07-31 07:22:24", photo_modified_time.strftime("%Y-%m-%d %H:%M:%S")
+-            )
+             self.assertTrue(
+                 os.path.exists(
+-                    os.path.join(data_dir, os.path.normpath("2018/07/31/IMG_7409-3294075.MOV"))
++                    os.path.join(data_dir, os.path.normpath("2018/07/31/IMG_7409.MOV"))
+                 )
+             )
+-            photo_mtime = os.path.getmtime(
+-                os.path.join(data_dir, os.path.normpath("2018/07/31/IMG_7409-3294075.MOV"))
+-            )
+-            photo_modified_time = datetime.datetime.fromtimestamp(
+-                photo_mtime, datetime.timezone.utc
+-            )
+-            self.assertEqual(
+-                "2018-07-31 07:22:24", photo_modified_time.strftime("%Y-%m-%d %H:%M:%S")
+-            )
+ 
+             assert result.exit_code == 0
+ 
+@@ -1253,10 +1325,7 @@ class DownloadPhotoTestCase(TestCase):
+                     f"Setting EXIF timestamp for {os.path.join(data_dir, os.path.normpath('2018/07/31/IMG_7409.JPG'))}: {expectedDatetime}",
+                     result.output,
+                 )
+-                self.assertIn(
+-                    f"Error setting EXIF data for {os.path.join(data_dir, os.path.normpath('2018/07/31/IMG_7409.JPG'))}",
+-                    result.output,
+-                )
++                piexif_patched.assert_called()
+                 self.assertIn("All photos have been downloaded", result.output)
+                 assert result.exit_code == 0
+ 
+@@ -1323,8 +1392,8 @@ class DownloadPhotoTestCase(TestCase):
+             if not hasattr(PhotoAsset, "already_downloaded"):
+                 response = orig_download(pa, session, _url, start)
+                 setattr(PhotoAsset, "already_downloaded", True)  # noqa: B010
+-                return response
+-            return mock.MagicMock()
++                return normalize_fixture_response_for_asset(response, pa, _url, start)
++            return complete_fixture_response_for_asset(pa, _url, start)
+ 
+         with mock.patch.object(PhotoAsset, "download", new=mocked_download):  # noqa: SIM117
+             with mock.patch("icloudpd.exif_datetime.get_photo_exif") as get_exif_patched:
+@@ -1378,8 +1447,8 @@ class DownloadPhotoTestCase(TestCase):
+             if not hasattr(PhotoAsset, "already_downloaded"):
+                 response = orig_download(pa, session, _url, start)
+                 setattr(PhotoAsset, "already_downloaded", True)  # noqa: B010
+-                return response
+-            return mock.MagicMock()
++                return normalize_fixture_response_for_asset(response, pa, _url, start)
++            return complete_fixture_response_for_asset(pa, _url, start)
+ 
+         with mock.patch.object(PhotoAsset, "download", new=mocked_download):  # noqa: SIM117
+             with mock.patch("icloudpd.exif_datetime.get_photo_exif") as get_exif_patched:
+@@ -2500,18 +2569,14 @@ class DownloadPhotoTestCase(TestCase):
+             result.output,
+         )
+         self.assertIn("All photos have been downloaded", result.output)
+-
+-        # Check that file was downloaded
+-        # Check that mtime was updated to the photo creation date
+-        photo_mtime = os.path.getmtime(out_path)
+-        photo_modified_time = datetime.datetime.fromtimestamp(photo_mtime, datetime.timezone.utc)
+-        self.assertEqual(
+-            "2018-07-31 07:22:24",
+-            photo_modified_time.strftime("%Y-%m-%d %H:%M:%S"),
+-            "photo timestamp",
++        self.assertIn("is truncated", result.output)
++        self.assertIn("keeping .part for resume", result.output)
++        self.assertFalse(os.path.exists(out_path))
++        self.assertTrue(
++            os.path.exists(
++                os.path.join(
++                    data_dir,
++                    os.path.normpath("2018/07/31/AGHJZ6A3ATJDRWS7D5WZSUMJGNIPMVOBBY======.part"),
++                )
++            )
+         )
+-
+-        # check size
+-        photo_size = os.path.getsize(out_path)
+-
+-        self.assertEqual(617 + 1234, photo_size, "photo size")

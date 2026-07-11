@@ -1,0 +1,29 @@
+scope: module
+parent: ../.staticeng/codemap.yml
+internals:
+  - path: test_telegram_auth.py
+  - path: test_autodelete_photos.py
+  - path: test_download_photos_id.py
+  - path: test_file_cache_last_sync_date.py
+  - path: test_listing_albums.py
+  - path: test_download_live_photos.py
+  - path: __init__.py
+  - path: test_authentication.py
+  - path: test_folder_structure.py
+  - path: test_json_rules.py
+  - path: test_keep_icloud_mode.py
+  - path: test_string_helpers.py
+  - path: test_session_connection_errors.py
+  - path: test_listing_recent_photos.py
+  - path: test_filenames.py
+  - path: test_issue_1220_only_print_filenames_dedup_bug.py
+  - path: test_two_step_auth.py
+  - path: test_logger.py
+  - path: test_xmp_sidecar.py
+  - path: test_listing_libraries.py
+  - path: test_email_notifications.py
+  - path: test_download_photos.py
+  - path: test_download_live_photos_id.py
+  - path: test_cli.py
+  - path: test_download_videos.py
+  - path: test_http.py

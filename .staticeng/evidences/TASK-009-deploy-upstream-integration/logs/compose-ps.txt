@@ -1,0 +1,2 @@
+NAME       IMAGE                                  COMMAND                SERVICE    CREATED         STATUS                   PORTS
+icloudpd   docker.staticduo.com/icloudpd:latest   "/app/entrypoint.sh"   icloudpd   2 minutes ago   Up 2 minutes (healthy)   8080/tcp, 0.0.0.0:48080->48080/tcp, :::48080->48080/tcp

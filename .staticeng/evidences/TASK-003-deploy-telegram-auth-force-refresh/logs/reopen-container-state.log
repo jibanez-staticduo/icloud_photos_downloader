@@ -1,0 +1,2 @@
+name=/icloudpd image=docker.staticduo.com/icloudpd:latest image_id=sha256:1319d91977f7e11929590e3cb86c82b976a7a7c73bf20fe3e3dc723d56862a99 status=running health=healthy started=2026-05-29T08:36:46.310480028Z restart_count=0
+image_id=sha256:1319d91977f7e11929590e3cb86c82b976a7a7c73bf20fe3e3dc723d56862a99 created=2026-05-29T08:36:32.73963338Z revision=8ccf4a382bfaa31b139c986f77cb0e4de4930c3f version=latest

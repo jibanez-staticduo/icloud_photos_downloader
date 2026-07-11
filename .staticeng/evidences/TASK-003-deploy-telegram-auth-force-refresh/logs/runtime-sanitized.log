@@ -1,0 +1,7 @@
+Keyring configured from /config/python_keyring/keyring_pass.cfg
+2026-05-29 10:36:47 INFO     Webhook configured successfully: https://icloudwh.staticduo.com/telegram/webhook
+2026-05-29 10:36:47 INFO     Telegram bot using webhooks (push notifications)
+2026-05-29 10:36:47 INFO     Serving on http://0.0.0.0:48080
+2026-05-29 10:36:47 ERROR    Authentication required for Account. (421)
+2026-05-29 10:36:50 INFO     Authentication completed successfully
+2026-05-29 10:36:50 INFO     Two-factor authentication is required (2fa)

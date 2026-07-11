@@ -1,0 +1,4 @@
+scope: module
+parent: ../../../../../../../.staticeng/codemap.yml
+internals:
+  - path: bootstrap.min.js

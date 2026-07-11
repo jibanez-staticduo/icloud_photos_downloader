@@ -1,0 +1,16 @@
+2026-05-29 10:36:47 INFO     Webhook configured successfully: https://icloudwh.staticduo.com/telegram/webhook
+2026-05-29 10:36:47 INFO     Telegram bot using webhooks (push notifications)
+2026-05-29 10:36:47 INFO     Serving on http://0.0.0.0:48080
+2026-05-29 10:36:47 ERROR    Authentication required for Account. (421)
+2026-05-29 10:36:50 INFO     Authentication completed successfully
+2026-05-29 10:36:50 INFO     Two-factor authentication is required (2fa)
+2026-05-29 10:36:50 INFO     Requested authentication code via Telegram for <REDACTED_EMAIL>
+2026-05-29 11:01:45 INFO     Telegram /auth command received, initiating authentication...
+2026-05-29 11:01:46 INFO     Telegram /auth restart requested while waiting for MFA code
+2026-05-29 11:01:46 INFO     Telegram /auth requested, forcing a fresh login flow
+2026-05-29 11:01:46 INFO     Deleted /config/staticduogmailcom to force re-authentication
+2026-05-29 11:01:46 INFO     Deleted /config/staticduogmailcom.session to force re-authentication
+2026-05-29 11:01:46 INFO     Session file does not exist
+2026-05-29 11:01:48 INFO     Authentication completed successfully
+2026-05-29 11:01:48 INFO     Two-factor authentication is required (2fa)
+2026-05-29 11:01:48 INFO     Requested authentication code via Telegram for <REDACTED_EMAIL>

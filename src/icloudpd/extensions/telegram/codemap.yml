@@ -1,0 +1,8 @@
+scope: module
+parent: ../../../../.staticeng/codemap.yml
+internals:
+  - path: runtime.py
+  - path: __init__.py
+  - path: routes.py
+  - path: mfa.py
+  - path: controller.py

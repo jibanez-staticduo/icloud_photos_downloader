@@ -1,0 +1,10 @@
+3f114d6 (HEAD -> task-008-upstream-integration) Merge remote-tracking branch 'upstream/master' into task-008-upstream-integration
+9857dd8 (tag: v1.32.3, upstream/master) fix: update build dependencies for Python 3.13/Trixie compatibility
+d0e7d25 Merge pull request #1344 from icloud-photos-downloader/fix/webui-2fa-push-notification
+106e8cf (upstream/fix/webui-2fa-push-notification) build: update Dockerfile.build
+d8eaf47 build: include Dockerfile.build-musl update for ARM32v7 test environment
+5333495 build: fix ARM32v7 staticx install path
+17584f7 build: apply updated Dockerfile.build changes
+3e48438 build: ensure setuptools and wheel are installed before staticx
+67abe4a fix: add 2FA push notification trigger for WebUI (pr-1335 followup)
+452ce8e Test for PR-1335

@@ -1,0 +1,8 @@
+COMMAND: ./release-image.sh
+RESULT: PASS
+Published tags:
+- docker.staticduo.com/icloudpd:latest
+- docker.staticduo.com/icloudpd:sha-8ccf4a3
+- docker.staticduo.com/icloudpd:branch-master
+Manifest digest: sha256:af0b3d0706a92a215a530a818111adc4215c9b507d774efe15c70297cc1d7ee4
+Image config digest: sha256:1319d91977f7e11929590e3cb86c82b976a7a7c73bf20fe3e3dc723d56862a99

@@ -1,0 +1,161 @@
+Keyring configured from /config/python_keyring/keyring_pass.cfg
+2026-05-30 08:55:02 INFO     Webhook configured successfully: https://icloudwh.staticduo.com/telegram/webhook
+2026-05-30 08:55:02 INFO     Telegram bot using webhooks (push notifications)
+2026-05-30 08:55:02 INFO     Serving on http://0.0.0.0:48080
+2026-05-30 08:55:02 INFO     Processing user: [REDACTED_EMAIL]
+2026-05-30 08:55:02 INFO     Authenticating...
+2026-05-30 08:55:02 ERROR    Authentication required for Account. (421)
+2026-05-30 08:55:04 INFO     Authentication completed successfully
+2026-05-30 08:55:04 INFO     Two-factor authentication is required (2fa)
+2026-05-30 08:55:05 INFO     Requested authentication code via Telegram for [REDACTED_EMAIL]
+2026-05-30 08:55:38 INFO     Telegram 6-digit authentication code received
+2026-05-30 08:55:38 INFO     Authentication code provided via Telegram
+2026-05-30 08:55:42 INFO     Great, you're all set up. The script can now be run without user interaction until 2FA expires.
+You can set up email notifications for when the two-factor authentication expires.
+(Use --help to view information about SMTP options.)
+2026-05-30 08:55:45 INFO     Looking up all photos and videos...
+2026-05-30 08:55:45 INFO     🔄 INCREMENTAL SYNC: Filtering photos added since 2026-05-18 23:02:14 (last sync: 2026-05-19 23:02:14, 1 day margin)
+2026-05-30 08:55:45 INFO     Found photos in iCloud (incremental sync - counting as we go...)
+2026-05-30 08:55:45 INFO     Checking and downloading new original photos and videos to /icloud ...
+2026-05-30 08:55:48 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:55:49 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:55:49 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:55:52 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:55:52 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:55:54 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:55:54 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:55:56 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:55:56 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:55:56 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:55:56 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:55:57 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:55:57 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:55:59 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:55:59 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:55:59 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:55:59 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:00 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:00 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:00 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:00 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:00 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:00 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:13 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:13 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:23 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:23 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:27 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:27 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:28 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:28 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:28 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:28 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:28 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:28 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:29 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:29 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:29 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:29 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:29 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:29 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:30 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:30 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:30 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:30 INFO     Downloading /icloud/[REDACTED_PATH] 15-03-00_1.mp4
+2026-05-30 08:56:30 INFO     Downloaded /icloud/[REDACTED_PATH] 15-03-00_1.mp4
+2026-05-30 08:56:30 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:30 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:30 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:31 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:31 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:31 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:31 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:35 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:35 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:37 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:37 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:38 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:38 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:42 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:42 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:43 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:43 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:44 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:44 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:44 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:44 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:44 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:44 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:45 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:45 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:45 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (1/0) (Rate: 0.02 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (2/0) (Rate: 0.03 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (3/0) (Rate: 0.05 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (4/0) (Rate: 0.07 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (5/0) (Rate: 0.08 items/s)
+2026-05-30 08:56:45 INFO     Downloading /icloud/[REDACTED_PATH]
+2026-05-30 08:56:45 INFO     Downloaded /icloud/[REDACTED_PATH]
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] - Ari y Jordi.MOV already exists (1/0) (Rate: 0.02 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (2/0) (Rate: 0.03 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (3/0) (Rate: 0.05 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (4/0) (Rate: 0.07 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (5/0) (Rate: 0.08 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (6/0) (Rate: 0.10 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (7/0) (Rate: 0.12 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (8/0) (Rate: 0.13 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (9/0) (Rate: 0.15 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (10/0) (Rate: 0.17 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (11/0) (Rate: 0.18 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (12/0) (Rate: 0.20 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (13/0) (Rate: 0.22 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (14/0) (Rate: 0.23 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (15/0) (Rate: 0.25 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (16/0) (Rate: 0.27 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (17/0) (Rate: 0.28 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (18/0) (Rate: 0.30 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (19/0) (Rate: 0.31 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (20/0) (Rate: 0.33 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (21/0) (Rate: 0.35 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (22/0) (Rate: 0.36 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (23/0) (Rate: 0.38 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (24/0) (Rate: 0.40 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (25/0) (Rate: 0.41 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (26/0) (Rate: 0.43 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (27/0) (Rate: 0.45 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (28/0) (Rate: 0.46 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (29/0) (Rate: 0.48 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (30/0) (Rate: 0.50 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (31/0) (Rate: 0.51 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (32/0) (Rate: 0.53 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (33/0) (Rate: 0.55 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (34/0) (Rate: 0.56 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (35/0) (Rate: 0.58 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (36/0) (Rate: 0.60 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (37/0) (Rate: 0.61 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (38/0) (Rate: 0.63 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (39/0) (Rate: 0.65 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (40/0) (Rate: 0.66 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (41/0) (Rate: 0.68 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (42/0) (Rate: 0.70 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (43/0) (Rate: 0.71 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (44/0) (Rate: 0.73 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (45/0) (Rate: 0.75 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (46/0) (Rate: 0.76 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (47/0) (Rate: 0.78 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (48/0) (Rate: 0.80 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (49/0) (Rate: 0.81 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (50/0) (Rate: 0.83 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (51/0) (Rate: 0.85 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (52/0) (Rate: 0.86 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (53/0) (Rate: 0.88 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (54/0) (Rate: 0.90 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (55/0) (Rate: 0.91 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (56/0) (Rate: 0.93 items/s)
+2026-05-30 08:56:45 INFO     /icloud/[REDACTED_PATH] already exists (57/0) (Rate: 0.94 items/s)
+2026-05-30 08:56:48 INFO     All photos and videos have been downloaded
+2026-05-30 08:56:48 INFO     Sending Telegram sync complete message (periodic): photos_downloaded=37
+2026-05-30 08:56:48 INFO     Sending sync complete message: photos_downloaded=37, next_sync=900s
+2026-05-30 08:56:48 INFO     Sync complete message sent successfully
+2026-05-30 08:56:48 INFO     Saved last sync date (iCloud addedDate): 2026-05-29 08:39:38 (next sync will only process new photos)
+2026-05-30 08:56:48 INFO     Waiting for 900 sec...

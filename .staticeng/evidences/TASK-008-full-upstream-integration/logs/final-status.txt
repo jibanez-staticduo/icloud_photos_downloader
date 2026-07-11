@@ -1,0 +1,17 @@
+ M entrypoint-wrapper.sh
+ M src/icloudpd/authentication.py
+ M src/icloudpd/base.py
+ M src/icloudpd/cli.py
+ M src/icloudpd/config.py
+ M src/icloudpd/download.py
+ M src/icloudpd/extensions/telegram/controller.py
+ M src/icloudpd/status.py
+ M tests/test_cli.py
+ M tests/test_download_photos.py
+?? .codenomad/
+?? .nomadworks/
+?? codemap.yml
+?? docs/scrs/
+?? evidences/
+?? tasks/
+?? tests/test_telegram_auth.py

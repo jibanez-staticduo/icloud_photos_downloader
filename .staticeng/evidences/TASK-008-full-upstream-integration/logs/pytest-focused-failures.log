@@ -1,0 +1,114 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_______________ AuthenticationTestCase.test_password_prompt_2fa ________________
+
+self = <tests.test_authentication.AuthenticationTestCase testMethod=test_password_prompt_2fa>
+
+    def test_password_prompt_2fa(self) -> None:
+        base_dir = os.path.join(self.fixtures_path, inspect.stack()[0][3])
+        cookie_dir = os.path.join(base_dir, "cookie")
+    
+        for dir in [base_dir, cookie_dir]:
+            recreate_path(dir)
+    
+        result = run_cassette(
+            os.path.join(self.vcr_path, "2fa_flow_valid_code.yml"),
+            [
+                "--username",
+                "jdoe@gmail.com",
+                "--password",
+                "password1",
+                "--no-progress-bar",
+                "--cookie-directory",
+                cookie_dir,
+                "--auth-only",
+            ],
+            input="654321\n",
+        )
+>       self.assertIn("Authenticating...", result.output)
+E       AssertionError: 'Authenticating...' not found in "Processing user: jdoe@gmail.com\nTwo-factor authentication is required (2fa)\n  a: (***) ***-**81\nPlease enter two-factor authentication code or device index (a) to send SMS with a code: 6543212026-05-30 05:05:13 INFO     Great, you're all set up. The script can now be run without user interaction until 2FA expires.\nYou can set up email notifications for when the two-factor authentication expires.\n(Use --help to view information about SMTP options.)\nAuthentication completed successfully"
+
+tests/test_authentication.py:171: AssertionError
+------------------------------ Captured log call -------------------------------
+INFO     Processing user: jdoe@gmail.com
+INFO     Session file does not exist
+INFO     Playing response for <Request (POST) https://idmsa.apple.com/appleauth/auth/signin/init> from cassette
+INFO     Playing response for <Request (POST) https://idmsa.apple.com/appleauth/auth/signin/complete?isRememberMeEnabled=true> from cassette
+INFO     Playing response for <Request (POST) https://setup.icloud.com/setup/ws/1/accountLogin> from cassette
+INFO     Authentication completed successfully
+INFO     Two-factor authentication is required (2fa)
+INFO     Playing response for <Request (GET) https://idmsa.apple.com/appleauth/auth> from cassette
+INFO     Playing response for <Request (PUT) https://idmsa.apple.com/appleauth/auth/verify/trusteddevice/securitycode> from cassette
+WARNING  Failed to parse response with JSON mimetype
+INFO     Playing response for <Request (POST) https://idmsa.apple.com/appleauth/auth/verify/trusteddevice/securitycode> from cassette
+INFO     Playing response for <Request (GET) https://idmsa.apple.com/appleauth/auth/2sv/trust> from cassette
+INFO     Playing response for <Request (POST) https://setup.icloud.com/setup/ws/1/accountLogin> from cassette
+INFO     Great, you're all set up. The script can now be run without user interaction until 2FA expires.
+You can set up email notifications for when the two-factor authentication expires.
+(Use --help to view information about SMTP options.)
+INFO     Authentication completed successfully
+_________________________ CliTestCase.test_cli_parser __________________________
+
+self = <tests.test_cli.CliTestCase testMethod=test_cli_parser>
+
+    def test_cli_parser(self) -> None:
+        self.assertEqual.__self__.maxDiff = None  # type: ignore[attr-defined]
+>       self.assertEqual(
+            parse(["--help"]),
+            (
+                GlobalConfig(
+                    help=True,
+                    version=False,
+                    use_os_locale=False,
+                    only_print_filenames=False,
+                    log_level=LogLevel.INFO,
+                    no_progress_bar=False,
+                    threads_num=1,
+                    domain="com",
+                    watch_with_interval=None,
+                    password_providers=[
+                        PasswordProvider.PARAMETER,
+                        PasswordProvider.KEYRING,
+                        PasswordProvider.CONSOLE,
+                    ],
+                    mfa_provider=MFAProvider.CONSOLE,
+                ),
+                [],
+            ),
+            "--help",
+        )
+E       AssertionError: Tuples differ: (Glob[292 chars]ing'>], mfa_provider=<MFAProvider.CONSOLE: 'co[162 chars], []) != (Glob[292 chars]ing'>, <PasswordProvider.CONSOLE: 'console'>],[201 chars], [])
+E       
+E       First differing element 0:
+E       Globa[291 chars]ing'>], mfa_provider=<MFAProvider.CONSOLE: 'co[157 chars]8080)
+E       Globa[291 chars]ing'>, <PasswordProvider.CONSOLE: 'console'>],[196 chars]8080)
+E       
+E         (GlobalConfig(help=True,
+E                       version=False,
+E                       use_os_locale=False,
+E                       only_print_filenames=False,
+E                       log_level=<LogLevel.INFO: 'info'>,
+E                       no_progress_bar=False,
+E                       threads_num=1,
+E                       domain='com',
+E                       watch_with_interval=None,
+E                       password_providers=[<PasswordProvider.PARAMETER: 'parameter'>,
+E       -                                   <PasswordProvider.KEYRING: 'keyring'>],
+E       ?                                                                        -
+E       
+E       +                                   <PasswordProvider.KEYRING: 'keyring'>,
+E       +                                   <PasswordProvider.CONSOLE: 'console'>],
+E                       mfa_provider=<MFAProvider.CONSOLE: 'console'>,
+E                       telegram_token=None,
+E                       telegram_chat_id=None,
+E                       telegram_polling=False,
+E                       telegram_polling_interval=30,
+E                       telegram_webhook_url=None,
+E                       telegram_webhook_port=48080),
+E          []) : --help
+
+tests/test_cli.py:75: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_authentication.py::AuthenticationTestCase::test_password_prompt_2fa
+FAILED tests/test_cli.py::CliTestCase::test_cli_parser - AssertionError: Tupl...
+2 failed in 0.72s

@@ -1,0 +1,9 @@
+TASK-005 deploy evidence
+NAME       IMAGE                                  COMMAND                SERVICE    CREATED         STATUS                   PORTS
+icloudpd   docker.staticduo.com/icloudpd:latest   "/app/entrypoint.sh"   icloudpd   2 minutes ago   Up 2 minutes (healthy)   8080/tcp, 0.0.0.0:48080->48080/tcp, :::48080->48080/tcp
+
+container_inspect
+container=/icloudpd id=1804e717a08fc029d6a306fe760199aa286d51ffcbd001b22ab1199d96af8453 image_id=sha256:fe297487f52106e8ba1fa6584cd6f213ef2a18c39243bce2dd442fd1ed89e748 image_ref=docker.staticduo.com/icloudpd:latest status=running health=healthy created=2026-05-29T22:08:30.944671251Z started=2026-05-29T22:08:31.771109115Z
+
+image_labels
+repo_digest=docker.staticduo.com/icloudpd@sha256:10eb718c967a720116195c48c6c2ddeca2a86419853921ea5982f19a11ec20e4 revision=8ccf4a382bfaa31b139c986f77cb0e4de4930c3f version=latest

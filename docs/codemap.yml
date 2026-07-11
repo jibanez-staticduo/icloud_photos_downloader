@@ -1,0 +1,14 @@
+scope: module
+parent: ../.staticeng/codemap.yml
+internals:
+  - path: index.md
+  - path: reference.md
+  - path: webui.md
+  - path: conf.py
+  - path: mode.md
+  - path: naming.md
+  - path: size.md
+  - path: raw.md
+  - path: install.md
+  - path: authentication.md
+  - path: nas.md

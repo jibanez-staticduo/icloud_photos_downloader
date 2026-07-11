@@ -1,0 +1,16 @@
+scope: module
+parent: ../../.staticeng/codemap.yml
+internals:
+  - path: base.py
+  - path: __init__.py
+  - path: file_match.py
+  - path: session.py
+  - path: live_photo_mov_filename_policy.py
+  - path: raw_policy.py
+  - path: cmdline.py
+  - path: version_size.py
+  - path: exceptions.py
+  - path: utils.py
+  - path: item_type.py
+  - path: asset_version.py
+  - path: sms.py

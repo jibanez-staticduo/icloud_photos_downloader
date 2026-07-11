@@ -1,0 +1,26 @@
+scope: module
+parent: ../../.staticeng/codemap.yml
+internals:
+  - path: base.py
+  - path: exif_datetime.py
+  - path: __init__.py
+  - path: status.py
+  - path: email_notifications.py
+  - path: cli.py
+  - path: password_provider.py
+  - path: mfa_provider.py
+  - path: log_level.py
+  - path: autodelete.py
+  - path: logger.py
+  - path: string_helpers.py
+  - path: download.py
+  - path: paths.py
+  - path: counter.py
+  - path: xmp_sidecar.py
+  - path: filename_policies.py
+  - path: telegram_bot.py
+  - path: file_cache.py
+  - path: progress.py
+  - path: constants.py
+  - path: config.py
+  - path: authentication.py

@@ -1,0 +1,87 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+________ DownloadPhotoTestCase.test_download_and_dedupe_existing_photos ________
+
+self = <tests.test_download_photos.DownloadPhotoTestCase testMethod=test_download_and_dedupe_existing_photos>
+
+    def test_download_and_dedupe_existing_photos(self) -> None:
+        base_dir = os.path.join(self.fixtures_path, inspect.stack()[0][3])
+    
+        files_to_create = [
+            ("2018/07/31", "IMG_7409.JPG", 1),
+            ("2018/07/31", "IMG_7409.MOV", 1),
+            ("2018/07/30", "IMG_7408.JPG", 1151066),
+            ("2018/07/30", "IMG_7408.MOV", 1606512),
+        ]
+    
+        files_to_download = [
+            ("2018/07/31", "IMG_7409-1884695.JPG"),
+            ("2018/07/31", "IMG_7409-3294075.MOV"),
+            ("2018/07/30", "IMG_7407.JPG"),
+            ("2018/07/30", "IMG_7407.MOV"),
+        ]
+    
+        # Download the first photo, but mock the video download
+        orig_download = PhotoAsset.download
+    
+        def mocked_download(self: PhotoAsset, session: Any, _url: str, start: int) -> Response:
+            return complete_fixture_response_for_asset(self, _url, start)
+    
+        with mock.patch.object(PhotoAsset, "download", new=mocked_download):
+>           data_dir, result = run_icloudpd_test(
+                self.assertEqual,
+                self.root_path,
+                base_dir,
+                "listing_photos.yml",
+                files_to_create,
+                files_to_download,
+                [
+                    "--username",
+                    "jdoe@gmail.com",
+                    "--password",
+                    "password1",
+                    "--recent",
+                    "5",
+                    "--skip-videos",
+                    # "--set-exif-datetime",
+                    "--no-progress-bar",
+                    "--threads-num",
+                    "1",
+                ],
+            )
+
+tests/test_download_photos.py:1223: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/helpers/__init__.py:439: in run_icloudpd_test
+    assert_files(assert_equal, data_dir, files_to_assert)
+tests/helpers/__init__.py:164: in assert_files
+    assert_equal(sum(1 for _ in files_in_result), len(files_to_assert), "File count does not match")
+E   AssertionError: 6 != 8 : File count does not match
+------------------------------ Captured log call -------------------------------
+INFO     Processing user: jdoe@gmail.com
+INFO     Authenticating...
+INFO     Playing response for <Request (POST) https://setup.icloud.com/setup/ws/1/validate> from cassette
+INFO     Authentication completed successfully
+INFO     Playing response for <Request (POST) https://p61-ckdatabasews.icloud.com/database/1/com.apple.photos.cloud/production/private/records/query?clientBuildNumber=2522Project44&clientMasteringNumber=2522B2&clientId=DE309E26-942E-11E8-92F5-14109FE0B321&dsid=12345678901&remapEnums=True&getCurrentSyncToken=True> from cassette
+INFO     Playing response for <Request (POST) https://p61-ckdatabasews.icloud.com/database/1/com.apple.photos.cloud/production/private/zones/list> from cassette
+INFO     Playing response for <Request (POST) https://p61-ckdatabasews.icloud.com/database/1/com.apple.photos.cloud/production/private/records/query?clientBuildNumber=2522Project44&clientMasteringNumber=2522B2&clientId=DE309E26-942E-11E8-92F5-14109FE0B321&dsid=12345678901&remapEnums=True&getCurrentSyncToken=True> from cassette
+INFO     Looking up all photos...
+INFO     🔄 FULL SYNC: No previous sync date found, processing all photos
+INFO     Playing response for <Request (POST) https://p61-ckdatabasews.icloud.com/database/1/com.apple.photos.cloud/production/private/internal/records/query/batch?clientBuildNumber=2522Project44&clientMasteringNumber=2522B2&clientId=DE309E26-942E-11E8-92F5-14109FE0B321&dsid=12345678901&remapEnums=True&getCurrentSyncToken=True> from cassette
+INFO     Found 33161 total photos in iCloud (after filters)
+INFO     Downloading 5 original photos to tests/fixtures/test_download_and_dedupe_existing_photos/data ...
+INFO     Playing response for <Request (POST) https://p61-ckdatabasews.icloud.com/database/1/com.apple.photos.cloud/production/private/records/query?clientBuildNumber=2522Project44&clientMasteringNumber=2522B2&clientId=DE309E26-942E-11E8-92F5-14109FE0B321&dsid=12345678901&remapEnums=True&getCurrentSyncToken=True> from cassette
+INFO     tests/fixtures/test_download_and_dedupe_existing_photos/data/2018/07/31/IMG_7409.JPG already exists (1/5) (Rate: 25.17 items/s)
+INFO     tests/fixtures/test_download_and_dedupe_existing_photos/data/2018/07/31/IMG_7409.MOV already exists (1/5) (Rate: 25.05 items/s)
+INFO     tests/fixtures/test_download_and_dedupe_existing_photos/data/2018/07/30/IMG_7408.JPG already exists (2/5) (Rate: 49.82 items/s)
+INFO     tests/fixtures/test_download_and_dedupe_existing_photos/data/2018/07/30/IMG_7408.MOV already exists (2/5) (Rate: 49.68 items/s)
+INFO     Downloading tests/fixtures/test_download_and_dedupe_existing_photos/data/2018/07/30/IMG_7407.JPG
+INFO     Downloaded tests/fixtures/test_download_and_dedupe_existing_photos/data/2018/07/30/IMG_7407.JPG
+INFO     Downloading tests/fixtures/test_download_and_dedupe_existing_photos/data/2018/07/30/IMG_7407.MOV
+INFO     Downloaded tests/fixtures/test_download_and_dedupe_existing_photos/data/2018/07/30/IMG_7407.MOV
+INFO     Skipping IMG_7405.MOV, only downloading photos. (Item type was: MOVIE)
+INFO     Skipping IMG_7404.MOV, only downloading photos. (Item type was: MOVIE)
+INFO     All photos have been downloaded
+=========================== short test summary info ============================
+FAILED tests/test_download_photos.py::DownloadPhotoTestCase::test_download_and_dedupe_existing_photos
+1 failed in 0.61s

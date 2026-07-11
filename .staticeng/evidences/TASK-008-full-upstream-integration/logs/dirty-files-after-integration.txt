@@ -1,0 +1,10 @@
+entrypoint-wrapper.sh
+src/icloudpd/authentication.py
+src/icloudpd/base.py
+src/icloudpd/cli.py
+src/icloudpd/config.py
+src/icloudpd/download.py
+src/icloudpd/extensions/telegram/controller.py
+src/icloudpd/status.py
+tests/test_cli.py
+tests/test_download_photos.py

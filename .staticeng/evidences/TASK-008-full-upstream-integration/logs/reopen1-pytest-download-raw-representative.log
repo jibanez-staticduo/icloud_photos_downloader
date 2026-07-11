@@ -1,0 +1,63 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+________________ DownloadPhotoTestCase.test_download_raw_photos ________________
+
+self = <tests.test_download_photos.DownloadPhotoTestCase testMethod=test_download_raw_photos>
+
+    def test_download_raw_photos(self) -> None:
+        base_dir = os.path.join(self.fixtures_path, inspect.stack()[0][3])
+    
+        files_to_download = [
+            ("2018/07/31", "IMG_7409.DNG")  # SU1HXzc0MDkuSlBH -> SU1HXzc0MDkuRE5H
+        ]
+    
+>       data_dir, result = run_icloudpd_test(
+            self.assertEqual,
+            self.root_path,
+            base_dir,
+            "listing_photos_raw.yml",
+            [],
+            files_to_download,
+            [
+                "--username",
+                "jdoe@gmail.com",
+                "--password",
+                "password1",
+                "--recent",
+                "1",
+                "--skip-videos",
+                "--skip-live-photos",
+                "--no-progress-bar",
+                "--threads-num",
+                "1",
+            ],
+        )
+
+tests/test_download_photos.py:1964: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/helpers/__init__.py:364: in run_icloudpd_test
+    assert_files(assert_equal, data_dir, files_to_assert)
+tests/helpers/__init__.py:111: in assert_files
+    assert_equal(
+E   AssertionError: False != True : File 2018/07/31/IMG_7409.DNG expected, but does not exist
+------------------------------ Captured log call -------------------------------
+INFO     Processing user: jdoe@gmail.com
+INFO     Authenticating...
+INFO     Playing response for <Request (POST) https://setup.icloud.com/setup/ws/1/validate> from cassette
+INFO     Authentication completed successfully
+INFO     Playing response for <Request (POST) https://p61-ckdatabasews.icloud.com/database/1/com.apple.photos.cloud/production/private/records/query?clientBuildNumber=2522Project44&clientMasteringNumber=2522B2&clientId=DE309E26-942E-11E8-92F5-14109FE0B321&dsid=12345678901&remapEnums=True&getCurrentSyncToken=True> from cassette
+INFO     Playing response for <Request (POST) https://p61-ckdatabasews.icloud.com/database/1/com.apple.photos.cloud/production/private/zones/list> from cassette
+INFO     Playing response for <Request (POST) https://p61-ckdatabasews.icloud.com/database/1/com.apple.photos.cloud/production/private/records/query?clientBuildNumber=2522Project44&clientMasteringNumber=2522B2&clientId=DE309E26-942E-11E8-92F5-14109FE0B321&dsid=12345678901&remapEnums=True&getCurrentSyncToken=True> from cassette
+INFO     Looking up all photos...
+INFO     🔄 FULL SYNC: No previous sync date found, processing all photos
+INFO     Playing response for <Request (POST) https://p61-ckdatabasews.icloud.com/database/1/com.apple.photos.cloud/production/private/internal/records/query/batch?clientBuildNumber=2522Project44&clientMasteringNumber=2522B2&clientId=DE309E26-942E-11E8-92F5-14109FE0B321&dsid=12345678901&remapEnums=True&getCurrentSyncToken=True> from cassette
+INFO     Found 33161 total photos in iCloud (after filters)
+INFO     Downloading the first original photo to tests/fixtures/test_download_raw_photos/data ...
+INFO     Playing response for <Request (POST) https://p61-ckdatabasews.icloud.com/database/1/com.apple.photos.cloud/production/private/records/query?clientBuildNumber=2522Project44&clientMasteringNumber=2522B2&clientId=DE309E26-942E-11E8-92F5-14109FE0B321&dsid=12345678901&remapEnums=True&getCurrentSyncToken=True> from cassette
+INFO     Downloading tests/fixtures/test_download_raw_photos/data/2018/07/31/IMG_7409.DNG
+INFO     Playing response for <Request (GET) https://cvws.icloud-content.com/B/AY6c-BsE0jjaXx9tmVGJM1D2VcEOAfUMnLhKAW8bwnMCwMMXLMKCslue/$%7Bf%7D?o=Ai7aJAyHfwftjSjEUZUly0UQWlCGQJLWjedI3fGj1Df0&v=1&x=3&a=Bw-O4l_UpI23JBfLD0wf_ZNwTumeA1LaRAEAAAMW2kQ&e=1533044225&k=Aj375aJi6sEmqgJPj64-7Q&fl=&r=02b17a96-ee7c-4379-aecf-532ffda2c021-1&ckc=com.apple.photos.cloud&ckz=PrimarySync&y=1&p=10&s=P8uy4YD0X_YWXH9e8C4b9amf2CQ> from cassette
+WARNING  Downloaded temp file tests/fixtures/test_download_raw_photos/data/2018/07/31/AGHJZ6A3ATJDRWS7D5WZSUMJGNIPMVOBBY======.part is truncated (161 < 1884695); keeping .part for resume
+INFO     All photos have been downloaded
+=========================== short test summary info ============================
+FAILED tests/test_download_photos.py::DownloadPhotoTestCase::test_download_raw_photos
+1 failed in 0.57s

@@ -1,0 +1,7 @@
+scope: module
+parent: ../.staticeng/codemap.yml
+internals:
+  - path: compile_compatibility.py
+  - path: compile_matrix.py
+  - path: compile_tzlc.py
+  - path: test_python_versions.sh

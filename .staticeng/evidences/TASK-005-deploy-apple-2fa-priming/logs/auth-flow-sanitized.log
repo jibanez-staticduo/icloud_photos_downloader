@@ -1,0 +1,5 @@
+icloudpd  | 2026-05-30 00:08:32 INFO     Webhook configured successfully: <TELEGRAM_WEBHOOK_URL>
+icloudpd  | 2026-05-30 00:08:32 INFO     Telegram bot using webhooks (push notifications)
+icloudpd  | 2026-05-30 00:08:33 ERROR    Authentication required for Account. (421)
+icloudpd  | 2026-05-30 00:08:35 INFO     Two-factor authentication is required (2fa)
+icloudpd  | 2026-05-30 00:08:36 INFO     Requested authentication code via Telegram for <APPLE_ACCOUNT>

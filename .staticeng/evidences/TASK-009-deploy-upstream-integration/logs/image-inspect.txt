@@ -1,0 +1,5 @@
+id=sha256:26e78995edb860b1bd65ce11d3af9d5d2e8a04ef50e102c680df626fd5d0df59
+repoDigests=["docker.staticduo.com/icloudpd@sha256:ecd56507a1f90276fa58eb6ed88eeb4c6dbfe532c181ad6a7652fccb381367f0"]
+revision=8ccf4a382bfaa31b139c986f77cb0e4de4930c3f
+version=latest
+source=git@github.com:jibanez-staticduo/icloud_photos_downloader.git

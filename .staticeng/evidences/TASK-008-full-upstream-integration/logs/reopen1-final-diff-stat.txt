@@ -1,0 +1,11 @@
+ entrypoint-wrapper.sh                          |  13 +
+ src/icloudpd/authentication.py                 |  38 ++-
+ src/icloudpd/base.py                           | 350 +++++++++++++++++++++++--
+ src/icloudpd/cli.py                            |  21 +-
+ src/icloudpd/config.py                         |   2 +
+ src/icloudpd/download.py                       |  84 +++++-
+ src/icloudpd/extensions/telegram/controller.py |  22 +-
+ src/icloudpd/status.py                         |  20 ++
+ tests/test_cli.py                              |  26 ++
+ tests/test_download_photos.py                  |  90 ++++++-
+ 10 files changed, 631 insertions(+), 35 deletions(-)

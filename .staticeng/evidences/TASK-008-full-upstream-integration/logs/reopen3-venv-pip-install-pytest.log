@@ -1,0 +1,35 @@
+Collecting pytest==8.4.0
+  Using cached pytest-8.4.0-py3-none-any.whl (363 kB)
+Collecting mock==5.2.0
+  Using cached mock-5.2.0-py3-none-any.whl (31 kB)
+Collecting freezegun==1.5.2
+  Using cached freezegun-1.5.2-py3-none-any.whl (18 kB)
+Collecting vcrpy==7.0.0
+  Using cached vcrpy-7.0.0-py2.py3-none-any.whl (42 kB)
+Collecting pytest-timeout==2.4.0
+  Using cached pytest_timeout-2.4.0-py3-none-any.whl (14 kB)
+Collecting iniconfig>=1
+  Using cached iniconfig-2.3.0-py3-none-any.whl (7.5 kB)
+Collecting packaging>=20
+  Using cached packaging-26.2-py3-none-any.whl (100 kB)
+Collecting pluggy<2,>=1.5
+  Using cached pluggy-1.6.0-py3-none-any.whl (20 kB)
+Collecting pygments>=2.7.2
+  Using cached pygments-2.20.0-py3-none-any.whl (1.2 MB)
+Collecting python-dateutil>=2.7
+  Using cached python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+Collecting PyYAML
+  Using cached pyyaml-6.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (806 kB)
+Collecting wrapt
+  Using cached wrapt-2.2.1-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (159 kB)
+Collecting yarl
+  Using cached yarl-1.24.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (106 kB)
+Requirement already satisfied: urllib3 in ./.venv/lib/python3.11/site-packages (from vcrpy==7.0.0) (1.26.20)
+Requirement already satisfied: six>=1.5 in ./.venv/lib/python3.11/site-packages (from python-dateutil>=2.7->freezegun==1.5.2) (1.17.0)
+Requirement already satisfied: idna>=2.0 in ./.venv/lib/python3.11/site-packages (from yarl->vcrpy==7.0.0) (3.17)
+Collecting multidict>=4.0
+  Using cached multidict-6.7.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (246 kB)
+Collecting propcache>=0.2.1
+  Using cached propcache-0.5.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (58 kB)
+Installing collected packages: wrapt, PyYAML, python-dateutil, pygments, propcache, pluggy, packaging, multidict, mock, iniconfig, yarl, pytest, freezegun, vcrpy, pytest-timeout
+Successfully installed PyYAML-6.0.3 freezegun-1.5.2 iniconfig-2.3.0 mock-5.2.0 multidict-6.7.1 packaging-26.2 pluggy-1.6.0 propcache-0.5.2 pygments-2.20.0 pytest-8.4.0 pytest-timeout-2.4.0 python-dateutil-2.9.0.post0 vcrpy-7.0.0 wrapt-2.2.1 yarl-1.24.2
