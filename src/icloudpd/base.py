@@ -13,6 +13,7 @@ import sys
 import time
 import typing
 import urllib
+import uuid
 from functools import partial, singledispatch
 from logging import Logger
 from multiprocessing import freeze_support
@@ -41,7 +42,7 @@ from tzlocal import get_localzone
 
 from foundation.core import compose, identity, map_, partial_1_1
 from icloudpd import download, exif_datetime
-from icloudpd.authentication import authenticator
+from icloudpd.authentication import TelegramAuthRestartRequested, authenticator
 from icloudpd.autodelete import autodelete_photos
 from icloudpd.config import GlobalConfig, UserConfig
 from icloudpd.counter import Counter
@@ -153,6 +154,233 @@ def lp_filename_original(filename: str) -> str:
 
     replace_with_mov = replace_extension(".MOV")
     return replace_with_mov(filename)
+
+
+def _quarantine_existing_file(
+    logger: logging.Logger,
+    source_path: str,
+    quarantine_directory: str,
+    library_directory: str,
+) -> str:
+    quarantine_directory = os.path.expandvars(os.path.expanduser(quarantine_directory))
+    source_abs = os.path.abspath(source_path)
+    library_abs = os.path.abspath(library_directory)
+    try:
+        relative_path = os.path.relpath(source_abs, library_abs)
+        if relative_path.startswith(os.pardir + os.sep) or relative_path == os.pardir:
+            relative_path = os.path.basename(source_path)
+    except ValueError:
+        relative_path = os.path.basename(source_path)
+
+    quarantine_path = os.path.join(quarantine_directory, relative_path)
+    os.makedirs(os.path.dirname(quarantine_path), exist_ok=True)
+    if os.path.exists(quarantine_path):
+        root, ext = os.path.splitext(quarantine_path)
+        quarantine_path = f"{root}.{uuid.uuid4().hex}{ext}"
+    shutil.move(source_path, quarantine_path)
+    logger.warning("Quarantined truncated file %s to %s", source_path, quarantine_path)
+    return quarantine_path
+
+
+def _path_is_inside(path: str, parent: str) -> bool:
+    try:
+        path_abs = os.path.abspath(os.path.expandvars(os.path.expanduser(path)))
+        parent_abs = os.path.abspath(os.path.expandvars(os.path.expanduser(parent)))
+        return os.path.commonpath([path_abs, parent_abs]) == parent_abs
+    except ValueError:
+        return False
+
+
+def _handle_truncated_existing_file(
+    logger: logging.Logger,
+    download_path: str,
+    local_size: int,
+    expected_size: int | None,
+    repair_mode: str,
+    quarantine_directory: str | None,
+    library_directory: str,
+    only_print_filenames: bool,
+    dry_run: bool,
+) -> tuple[bool, bool, bool, bool]:
+    """Return file state plus whether an explicit staged replacement should run."""
+    if expected_size is None or local_size >= expected_size:
+        return True, False, False, False
+
+    if repair_mode == "off":
+        return True, False, True, False
+
+    logger.warning(
+        "%s appears truncated (%s < %s)",
+        truncate_middle(download_path, 96),
+        local_size,
+        expected_size,
+    )
+
+    if repair_mode == "audit" or dry_run or only_print_filenames:
+        logger.warning("Would quarantine and redownload %s", truncate_middle(download_path, 96))
+        return True, False, True, False
+
+    if not quarantine_directory:
+        logger.error(
+            "Repair replace mode requires --repair-quarantine-directory for %s",
+            truncate_middle(download_path, 96),
+        )
+        return True, True, True, False
+
+    if _path_is_inside(quarantine_directory, library_directory):
+        logger.error(
+            "Repair quarantine directory must be outside the download directory: %s",
+            quarantine_directory,
+        )
+        return True, True, True, False
+
+    return True, False, True, True
+
+
+def _dedicated_quarantine_marker_path(quarantine_directory: str) -> str:
+    return os.path.join(
+        os.path.expandvars(os.path.expanduser(quarantine_directory)),
+        ".icloudpd-quarantine",
+    )
+
+
+def _ensure_dedicated_quarantine_directory(
+    logger: logging.Logger,
+    quarantine_directory: str,
+) -> bool:
+    marker_path = _dedicated_quarantine_marker_path(quarantine_directory)
+    quarantine_directory = os.path.dirname(marker_path)
+    os.makedirs(quarantine_directory, exist_ok=True)
+    if os.path.exists(marker_path):
+        return True
+
+    allowed_entries = {".staging"}
+    entries = set(os.listdir(quarantine_directory)) - allowed_entries
+    if entries:
+        logger.error(
+            "Repair quarantine directory must be dedicated or contain %s marker: %s",
+            os.path.basename(marker_path),
+            quarantine_directory,
+        )
+        return False
+
+    with open(marker_path, "w", encoding="utf8") as marker_file:
+        marker_file.write("icloudpd quarantine directory\n")
+    return True
+
+
+def _stage_replacement_download(
+    logger: logging.Logger,
+    icloud: PyiCloudService,
+    photo: PhotoAsset,
+    source_path: str,
+    version: Any,
+    size: Any,
+    filename_builder: Callable[[PhotoAsset], str],
+    quarantine_directory: str,
+) -> str | None:
+    _ = quarantine_directory
+    source_directory = os.path.dirname(source_path)
+    staging_dir = os.path.join(source_directory, f".icloudpd-repair-staging-{uuid.uuid4().hex}")
+    staging_path = os.path.join(staging_dir, os.path.basename(source_path))
+    logger.warning(
+        "Downloading replacement for %s to staging path %s",
+        truncate_middle(source_path, 96),
+        staging_path,
+    )
+    if not download.download_media(
+        logger,
+        False,
+        icloud,
+        photo,
+        staging_path,
+        version,
+        size,
+        filename_builder,
+    ):
+        logger.error("Replacement download failed; leaving original file untouched: %s", source_path)
+        return None
+    return staging_path
+
+
+def _remove_empty_staging_directory(logger: logging.Logger, staging_path: str) -> None:
+    try:
+        os.rmdir(os.path.dirname(staging_path))
+    except OSError:
+        logger.debug("Could not remove staging directory %s", os.path.dirname(staging_path))
+
+
+def _replace_from_staged_download(
+    logger: logging.Logger,
+    source_path: str,
+    staging_path: str,
+    quarantine_directory: str,
+    library_directory: str,
+) -> bool:
+    backup_path = f"{source_path}.icloudpd-repair-backup-{uuid.uuid4().hex}"
+    try:
+        os.replace(source_path, backup_path)
+    except OSError:
+        logger.exception("Could not prepare truncated file for replacement: %s", source_path)
+        return False
+
+    try:
+        os.replace(staging_path, source_path)
+    except OSError:
+        logger.exception("Could not promote replacement; restoring original file: %s", source_path)
+        try:
+            os.replace(backup_path, source_path)
+        except OSError:
+            logger.exception(
+                "Could not restore original file; backup remains at %s",
+                backup_path,
+            )
+        return False
+
+    _remove_empty_staging_directory(logger, staging_path)
+
+    try:
+        _quarantine_existing_file(logger, backup_path, quarantine_directory, library_directory)
+    except OSError:
+        logger.exception("Replacement succeeded but backup remains at %s", backup_path)
+        return False
+
+    logger.warning("Replaced truncated file with validated download: %s", source_path)
+    return True
+
+
+def _replace_truncated_existing_file(
+    logger: logging.Logger,
+    icloud: PyiCloudService,
+    photo: PhotoAsset,
+    source_path: str,
+    version: Any,
+    size: Any,
+    filename_builder: Callable[[PhotoAsset], str],
+    quarantine_directory: str,
+    library_directory: str,
+) -> bool:
+    if not _ensure_dedicated_quarantine_directory(logger, quarantine_directory):
+        return False
+    staging_path = _stage_replacement_download(
+        logger,
+        icloud,
+        photo,
+        source_path,
+        version,
+        size,
+        filename_builder,
+        quarantine_directory,
+    )
+    if staging_path is None:
+        return False
+    return _replace_from_staged_download(
+        logger,
+        source_path,
+        staging_path,
+        quarantine_directory,
+        library_directory,
+    )
 
 
 def ask_password_in_console(_user: str) -> str | None:
@@ -518,14 +746,31 @@ def _process_all_users_once(
                     lp_filename_generator,
                     filename_builder,
                     user_config.align_raw,
+                    user_config.repair_truncated_downloads,
+                    user_config.repair_quarantine_directory,
                 )
                 # Create a wrapper (file_cache no longer used for file caching, only for sync date)
                 # total_photos and start_time will be set later when we know the actual count
-                def downloader_wrapper(icloud: PyiCloudService, counter: Counter, photo: PhotoAsset, total_photos: int | None = None, start_time: float | None = None) -> bool:
-                    return download_builder_partial(icloud, counter, photo, file_cache=None, total_photos=total_photos, start_time=start_time)
+                def downloader_wrapper(
+                    icloud: PyiCloudService,
+                    counter: Counter,
+                    photo: PhotoAsset,
+                    download_failure_observer: Callable[[], None] | None = None,
+                    total_photos: int | None = None,
+                    start_time: float | None = None,
+                ) -> bool:
+                    return download_builder_partial(
+                        icloud,
+                        counter,
+                        photo,
+                        file_cache=None,
+                        total_photos=total_photos,
+                        start_time=start_time,
+                        download_failure_observer=download_failure_observer,
+                    )
                 downloader = downloader_wrapper
             else:
-                downloader = lambda _s, _c, _p: False
+                downloader = lambda _s, _c, _p, _observer=None, **_kwargs: False
 
             notificator = partial(
                 notificator_builder,
@@ -634,22 +879,24 @@ def where_builder(
     photo: PhotoAsset,
 ) -> bool:
     if skip_videos and photo.item_type == AssetItemType.MOVIE:
-        logger.debug(asset_type_skip_message(AssetItemType.IMAGE, filename_builder, photo))
+        logger.info(asset_type_skip_message(AssetItemType.IMAGE, filename_builder, photo))
         return False
     if skip_photos and photo.item_type == AssetItemType.IMAGE:
-        logger.debug(asset_type_skip_message(AssetItemType.MOVIE, filename_builder, photo))
+        logger.info(asset_type_skip_message(AssetItemType.MOVIE, filename_builder, photo))
         return False
 
     if skip_created_before is not None:
         temp_created_before = offset_to_datetime(skip_created_before)
-        if photo.created < temp_created_before:
-            logger.debug(skip_created_before_message(temp_created_before, photo, filename_builder))
+        created = photo.created.astimezone(temp_created_before.tzinfo)
+        if created < temp_created_before:
+            logger.info(skip_created_before_message(temp_created_before, photo, filename_builder))
             return False
 
     if skip_created_after is not None:
         temp_created_after = offset_to_datetime(skip_created_after)
-        if photo.created > temp_created_after:
-            logger.debug(skip_created_after_message(temp_created_after, photo, filename_builder))
+        created = photo.created.astimezone(temp_created_after.tzinfo)
+        if created > temp_created_after:
+            logger.info(skip_created_after_message(temp_created_after, photo, filename_builder))
             return False
 
     return True
@@ -689,12 +936,16 @@ def download_builder(
     lp_filename_generator: Callable[[str], str],
     filename_builder: Callable[[PhotoAsset], str],
     raw_policy: RawTreatmentPolicy,
+    repair_truncated_downloads: str,
+    repair_quarantine_directory: str | None,
     icloud: PyiCloudService,
     counter: Counter,
     photo: PhotoAsset,
     file_cache: FileCache | None = None,  # Not used anymore, kept for compatibility
+    use_cache: bool = False,
     total_photos: int | None = None,  # Total photos to process (for counter display)
     start_time: float | None = None,  # Start time for rate calculation
+    download_failure_observer: Callable[[], None] | None = None,
 ) -> bool:
     """function for actually downloading the photos"""
 
@@ -787,11 +1038,49 @@ def download_builder(
             file_exists = os.path.isfile(original_download_path)
 
         if file_exists:
+            existing_path = original_download_path or download_path
+            local_size = os.stat(existing_path).st_size
+            photo_size = version.size
+            file_exists, abort_download, skip_dedup, repair_replace = _handle_truncated_existing_file(
+                logger,
+                existing_path,
+                local_size,
+                photo_size,
+                repair_truncated_downloads,
+                repair_quarantine_directory,
+                directory,
+                only_print_filenames,
+                dry_run,
+            )
+            if abort_download:
+                return False
+            if repair_replace:
+                if not _replace_truncated_existing_file(
+                    logger,
+                    icloud,
+                    photo,
+                    existing_path,
+                    version,
+                    download_size,
+                    filename_builder,
+                    typing.cast(str, repair_quarantine_directory),
+                    directory,
+                ):
+                    return False
+                counter.reset()
+                success = True
+                continue
+            if not file_exists:
+                original_download_path = None
+                download_path = local_download_path(filename, download_dir)
             # Only do additional checks for deduplication
-            if file_match_policy == FileMatchPolicy.NAME_SIZE_DEDUP_WITH_SUFFIX:
+            if (
+                file_exists
+                and not skip_dedup
+                and file_match_policy == FileMatchPolicy.NAME_SIZE_DEDUP_WITH_SUFFIX
+            ):
                 # for later: this crashes if download-size medium is specified
                 file_size = os.stat(original_download_path or download_path).st_size
-                photo_size = version.size
                 if file_size != photo_size:
                     download_path = (f"-{photo_size}.").join(download_path.rsplit(".", 1))
                     logger.debug("%s deduplicated", truncate_middle(download_path, 96))
@@ -806,7 +1095,7 @@ def download_builder(
                     elapsed = time.time() - start_time
                     rate = current_count / elapsed if elapsed > 0 else 0.0
                     counter_text = f" ({current_count}/{total_photos}) (Rate: {rate:.2f} items/s)"
-                logger.debug("%s already exists%s", truncate_middle(download_path, 96), counter_text)
+                logger.info("%s already exists%s", truncate_middle(download_path, 96), counter_text)
 
         if not file_exists:
             counter.reset()
@@ -814,7 +1103,7 @@ def download_builder(
                 print(download_path)
             else:
                 truncated_path = truncate_middle(download_path, 96)
-                logger.debug("Downloading %s...", truncated_path)
+                logger.info("Downloading %s", truncated_path)
 
                 download_result = download.download_media(
                     logger,
@@ -825,8 +1114,14 @@ def download_builder(
                     version,
                     download_size,
                     filename_builder,
+                    download_failure_observer,
                 )
                 success = download_result
+                if not download_result and download_failure_observer:
+                    logger.error(
+                        "Download incomplete for %s; leaving any partial file for retry",
+                        truncated_path,
+                    )
 
                 if download_result:
                     from foundation.core import compose
@@ -842,7 +1137,7 @@ def download_builder(
                     ):
                         # %Y:%m:%d looks wrong, but it's the correct format
                         date_str = created_date.strftime("%Y-%m-%d %H:%M:%S%z")
-                        logger.debug("Setting EXIF timestamp for %s: %s", download_path, date_str)
+                        logger.info("Setting EXIF timestamp for %s: %s", download_path, date_str)
                         exif_datetime.set_photo_exif(
                             logger,
                             download_path,
@@ -909,10 +1204,43 @@ def download_builder(
                         print(lp_download_path)
             else:
                 if lp_file_exists:
+                    lp_file_size = os.stat(lp_download_path).st_size
+                    lp_photo_size = version.size
+                    lp_file_exists, abort_download, skip_dedup, repair_replace = _handle_truncated_existing_file(
+                        logger,
+                        lp_download_path,
+                        lp_file_size,
+                        lp_photo_size,
+                        repair_truncated_downloads,
+                        repair_quarantine_directory,
+                        directory,
+                        only_print_filenames,
+                        dry_run,
+                    )
+                    if abort_download:
+                        return False
+                    if repair_replace:
+                        if not _replace_truncated_existing_file(
+                            logger,
+                            icloud,
+                            photo,
+                            lp_download_path,
+                            version,
+                            lp_size,
+                            filename_builder,
+                            typing.cast(str, repair_quarantine_directory),
+                            directory,
+                        ):
+                            return False
+                        success = True
+                        lp_file_exists = True
+                        skip_dedup = True
                     # Only do additional checks for deduplication
-                    if file_match_policy == FileMatchPolicy.NAME_SIZE_DEDUP_WITH_SUFFIX:
-                        lp_file_size = os.stat(lp_download_path).st_size
-                        lp_photo_size = version.size
+                    if (
+                        lp_file_exists
+                        and not skip_dedup
+                        and file_match_policy == FileMatchPolicy.NAME_SIZE_DEDUP_WITH_SUFFIX
+                    ):
                         if lp_file_size != lp_photo_size:
                             lp_download_path = (f"-{lp_photo_size}.").join(
                                 lp_download_path.rsplit(".", 1)
@@ -928,10 +1256,10 @@ def download_builder(
                             elapsed = time.time() - start_time
                             rate = current_count / elapsed if elapsed > 0 else 0.0
                             counter_text = f" ({current_count}/{total_photos}) (Rate: {rate:.2f} items/s)"
-                        logger.debug("%s already exists%s", truncate_middle(lp_download_path, 96), counter_text)
+                        logger.info("%s already exists%s", truncate_middle(lp_download_path, 96), counter_text)
                 if not lp_file_exists:
                     truncated_path = truncate_middle(lp_download_path, 96)
-                    logger.debug("Downloading %s...", truncated_path)
+                    logger.info("Downloading %s", truncated_path)
                     download_result = download.download_media(
                         logger,
                         dry_run,
@@ -941,8 +1269,14 @@ def download_builder(
                         version,
                         lp_size,
                         filename_builder,
+                        download_failure_observer,
                     )
                     success = download_result and success
+                    if not download_result and download_failure_observer:
+                        logger.error(
+                            "Download incomplete for %s; leaving any partial file for retry",
+                            truncated_path,
+                        )
                     if download_result:
                         logger.info("Downloaded %s", truncated_path)
     return success
@@ -956,7 +1290,7 @@ def delete_photo(
 ) -> None:
     """Delete a photo from the iCloud account."""
     clean_filename_local = filename_builder(photo)
-    logger.debug("Deleting %s in iCloud...", clean_filename_local)
+    logger.info("Deleting %s in iCloud...", clean_filename_local)
     url = (
         f"{library_object.service_endpoint}/records/modify?"
         f"{urllib.parse.urlencode(library_object.params)}"
@@ -992,9 +1326,8 @@ def delete_photo_dry_run(
     """Dry run for deleting a photo from the iCloud"""
     filename = filename_builder(photo)
     logger.info(
-        "[DRY RUN] Would delete %s in iCloud library %s",
+        "[DRY RUN] Would delete %s in iCloud",
         filename,
-        library_object.zone_id["zoneName"],
     )
 
 
@@ -1024,7 +1357,9 @@ def core_single_run(
         PasswordProvider, Tuple[Callable[[str], str | None], Callable[[str, str], None]]
     ],
     passer: Callable[[PhotoAsset], bool],
-    downloader: Callable[[PyiCloudService, Counter, PhotoAsset], bool],
+    downloader: Callable[
+        [PyiCloudService, Counter, PhotoAsset, Callable[[], None] | None], bool
+    ],
     notificator: Callable[[], None],
     lp_filename_generator: Callable[[str], str],
     file_cache: FileCache | None = None,
@@ -1127,7 +1462,6 @@ def core_single_run(
                     
                     # Create filename_builder if not provided (for backward compatibility)
                     if filename_builder is None:
-                        from icloudpd.filename_policies import create_filename_builder
                         filename_cleaner = build_filename_cleaner(user_config.keep_unicode_in_filenames)
                         filename_builder = create_filename_builder(
                             user_config.file_match_policy, filename_cleaner
@@ -1144,7 +1478,7 @@ def core_single_run(
                     else:
                         album_phrase = f" from albums {','.join(user_config.albums)}"
 
-                    logger.debug(f"Looking up all {photo_video_phrase}{album_phrase}...")
+                    logger.info(f"Looking up all {photo_video_phrase}{album_phrase}...")
 
                     albums: Iterable[PhotoAlbum] = (
                         list(map_(library_object.albums.__getitem__, user_config.albums))
@@ -1344,6 +1678,12 @@ def core_single_run(
                             progress.photos_count = photos_to_download
                         photos_counter = 0
                         photos_downloaded = 0  # Track photos actually downloaded in this iteration
+                        photos_download_failed = False
+
+                        def mark_download_failed() -> None:
+                            nonlocal photos_download_failed
+                            photos_download_failed = True
+
                         # Initialize photos_checked for status tracking
                         progress.photos_checked = 0
 
@@ -1354,7 +1694,14 @@ def core_single_run(
                         progress.processing_start_time = loop_start_time
                         # Create download_photo with total_photos and start_time for counter display
                         # Use lambda to pass keyword arguments correctly
-                        download_photo = lambda counter, photo: downloader(icloud, counter, photo, total_photos=photos_to_download, start_time=loop_start_time)
+                        download_photo = lambda counter, photo: downloader(
+                            icloud,
+                            counter,
+                            photo,
+                            mark_download_failed,
+                            total_photos=photos_to_download,
+                            start_time=loop_start_time,
+                        )
 
                         photos_processed_count = 0
                         for item in photos_bar:
@@ -1488,6 +1835,11 @@ def core_single_run(
                             status_exchange.get_progress().photos_last_message = (
                                 "Iteration was cancelled"
                             )
+                        elif photos_download_failed:
+                            message = "Some photos or videos could not be downloaded completely"
+                            logger.error(message)
+                            status_exchange.get_progress().photos_last_message = message
+                            return 1
                         else:
                             if user_config.skip_photos or user_config.skip_videos:
                                 photo_video_phrase = (
@@ -1564,6 +1916,8 @@ def core_single_run(
                 update_auth_error_in_webui(status_exchange, str(error))
                 continue
             elif global_config.mfa_provider == MFAProvider.TELEGRAM and telegram_bot:
+                if isinstance(error, TelegramAuthRestartRequested):
+                    continue
                 # Error already handled in request_2fa_telegram, just continue
                 continue
             else:

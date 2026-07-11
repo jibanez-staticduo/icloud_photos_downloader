@@ -99,7 +99,7 @@ class TelegramBot:
                 self.send_message("✅ Synchronization started")
             # Check if message is a 6-digit code (for MFA)
             elif self._is_six_digit_code(text) and self._waiting_for_auth_code:
-                self.logger.info(f"Telegram 6-digit code received: {text}")
+                self.logger.info("Telegram 6-digit authentication code received")
                 self._handle_auth_code(text)
             # If waiting for auth code but received something else, remind user
             elif self._waiting_for_auth_code:
@@ -387,11 +387,21 @@ class TelegramBot:
 
     def _initiate_auth(self) -> None:
         """Initiate authentication process"""
-        # Force authentication by clearing cookies or triggering re-auth
-        # The authentication will be handled in the main loop when it detects requires_2fa
-        self.send_message("🔐 Starting authentication process...\n\nAuthentication will be attempted on the next synchronization. If a 6-digit code is required, I will ask for it here.")
-        # Set resume flag to trigger sync, which will attempt authentication
         progress = self.status_exchange.get_progress()
+        is_processing = self.status_exchange.get_current_user() is not None
+        is_waiting_for_mfa = self.status_exchange.get_status() == Status.NEED_MFA
+        if is_processing and not is_waiting_for_mfa:
+            self.send_message(
+                "🔐 Fresh authentication requested.\n\n"
+                "A sync is already processing, so the fresh auth attempt is queued "
+                "until the current processing can safely restart."
+            )
+        else:
+            self.send_message(
+                "🔐 Starting a fresh authentication attempt now.\n\n"
+                "If Apple requires a 6-digit code, I will ask for the new code here."
+            )
+        # Set resume flag to trigger sync, which will attempt authentication
         progress.resume = True
         progress.cancel = False
         self.status_exchange.request_auth_mode()
@@ -405,7 +415,7 @@ class TelegramBot:
             if self.status_exchange.set_payload(code):
                 self._waiting_for_auth_code = False
                 self.send_message("✅ Code received, verifying...")
-                self.logger.info(f"Authentication code provided via Telegram: {code}")
+                self.logger.info("Authentication code provided via Telegram")
             else:
                 self.send_message("❌ Error: Could not process the code. Please try again.")
                 self.logger.error("Failed to set authentication code payload")

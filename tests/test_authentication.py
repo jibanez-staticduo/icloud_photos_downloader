@@ -5,7 +5,7 @@ from typing import NamedTuple, NoReturn
 from unittest import TestCase, mock
 
 import pytest
-from requests import Timeout
+from requests import Response, Timeout
 from requests.exceptions import ConnectionError
 from vcr import VCR
 
@@ -16,10 +16,42 @@ from icloudpd.base import dummy_password_writter
 from icloudpd.logger import setup_logger
 from icloudpd.mfa_provider import MFAProvider
 from icloudpd.status import StatusExchange
+from pyicloud_ipd.base import PyiCloudService
+from pyicloud_ipd.exceptions import PyiCloudAPIResponseException
 from pyicloud_ipd.sms import parse_trusted_phone_numbers_payload
 from tests.helpers import path_from_project_root, recreate_path, run_cassette
 
 vcr = VCR(decode_compressed_response=True, record_mode="none")
+
+
+class PushNotificationTestCase(TestCase):
+    def test_trigger_push_notification_returns_false_on_non_success_response(self) -> None:
+        service = PyiCloudService.__new__(PyiCloudService)
+        service.response_observer = None
+        service.AUTH_ENDPOINT = "https://idmsa.apple.com/appleauth/auth"
+        service.session = mock.Mock()
+        response = Response()
+        response.status_code = 503
+        service.session.put.return_value = response
+        service._get_auth_headers = mock.Mock(return_value={})
+        service.use_rules = mock.MagicMock()
+
+        with self.assertLogs("pyicloud_ipd.base", level="WARNING") as logs:
+            result = service.trigger_push_notification()
+
+        self.assertFalse(result)
+        self.assertIn("status 503", "\n".join(logs.output))
+
+    def test_trigger_push_notification_preserves_api_exception_behavior(self) -> None:
+        service = PyiCloudService.__new__(PyiCloudService)
+        service.response_observer = None
+        service.AUTH_ENDPOINT = "https://idmsa.apple.com/appleauth/auth"
+        service.session = mock.Mock()
+        service.session.put.side_effect = PyiCloudAPIResponseException("invalid", "401")
+        service._get_auth_headers = mock.Mock(return_value={})
+        service.use_rules = mock.MagicMock()
+
+        self.assertFalse(service.trigger_push_notification())
 
 
 class AuthenticationTestCase(TestCase):
@@ -197,6 +229,13 @@ class AuthenticationTestCase(TestCase):
 
     def test_parse_trusted_phone_numbers_payload_minimal(self) -> None:
         html = '<script type="application/json" class="boot_args">{"direct":{"twoSV":{"phoneNumberVerification":{"trustedPhoneNumbers":[{"numberWithDialCode":"+1 (•••) •••-••81","pushMode":"sms","obfuscatedNumber":"(•••) •••-••81","lastTwoDigits":"81","id":1}]},"authInitialRoute":"auth/verify/phone"}}}</script>'  # noqa: E501
+        expected = _TrustedDevice(id=1, obfuscated_number="(***) ***-**81")
+        result = parse_trusted_phone_numbers_payload(html)
+        self.assertEqual(1, len(result), "number of numbers parsed")
+        self.assertEqual(expected, result[0], "parsed number")
+
+    def test_parse_trusted_phone_numbers_payload_bridge_initiate_fallback(self) -> None:
+        html = '<script type="application/json" class="boot_args">{"direct":{"twoSV":{"bridgeInitiateData":{"phoneNumberVerification":{"trustedPhoneNumbers":[{"numberWithDialCode":"+1 (•••) •••-••81","pushMode":"sms","obfuscatedNumber":"(•••) •••-••81","lastTwoDigits":"81","id":1}]}},"authInitialRoute":"auth/verify/phone"}}}</script>'  # noqa: E501
         expected = _TrustedDevice(id=1, obfuscated_number="(***) ***-**81")
         result = parse_trusted_phone_numbers_payload(html)
         self.assertEqual(1, len(result), "number of numbers parsed")

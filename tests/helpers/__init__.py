@@ -7,11 +7,14 @@ import traceback
 from contextlib import redirect_stderr, redirect_stdout
 from functools import partial
 from typing import IO, Any, Callable, List, Mapping, Protocol, Sequence, Tuple, TypeVar
+from unittest import mock
 
+from requests import Response
 from vcr import VCR
 
 from foundation.core import compose, flip, partial_1_1, partial_2_1
 from icloudpd.cli import cli
+from pyicloud_ipd.services.photos import PhotoAsset
 
 vcr = VCR(decode_compressed_response=True, record_mode="none")
 
@@ -69,6 +72,61 @@ def create_files(data_dir: str, files_to_create: Sequence[Tuple[str, str, int]])
         os.makedirs(os.path.join(data_dir, normalized_dir_name), exist_ok=True)
         with open(os.path.join(data_dir, normalized_dir_name, file_name), "a") as f:
             f.truncate(file_size)
+
+
+def complete_fixture_download_response(response: Response, start: int = 0) -> Response:
+    """Expand intentionally tiny VCR media bodies to their advertised length."""
+    content = getattr(response, "content", None)
+    if not getattr(response, "ok", False) or not isinstance(content, bytes):
+        return response
+
+    try:
+        remaining_size = max(int(response.headers.get("Content-Length", "0")) - start, 0)
+    except (TypeError, ValueError):
+        return response
+
+    if remaining_size > len(content):
+        response._content = content + (b"\0" * (remaining_size - len(content)))
+        response.headers["Content-Length"] = str(remaining_size)
+    return response
+
+
+def complete_fixture_response_for_asset(asset: PhotoAsset, url: str, start: int = 0) -> Response:
+    """Build a complete synthetic media response for locally mocked downloads."""
+    expected_size = 0
+    for version in asset.versions.values():
+        if version.url == url:
+            expected_size = max(version.size - start, 0)
+            break
+    if expected_size == 0 and asset.versions:
+        expected_size = max(min(version.size for version in asset.versions.values()) - start, 0)
+    response = Response()
+    response.status_code = 200
+    response._content = b"\0" * expected_size
+    response.headers["Content-Length"] = str(expected_size)
+    return response
+
+
+def _expected_fixture_size_for_url(asset: PhotoAsset, url: str, start: int = 0) -> int:
+    for version in asset.versions.values():
+        if version.url == url:
+            return max(version.size - start, 0)
+    if asset.versions:
+        return max(min(version.size for version in asset.versions.values()) - start, 0)
+    return 0
+
+
+def normalize_fixture_response_for_asset(response: Response, asset: PhotoAsset, url: str, start: int) -> Response:
+    expected_size = _expected_fixture_size_for_url(asset, url, start)
+    content = getattr(response, "content", b"")
+    if not isinstance(content, bytes):
+        content = b""
+    if expected_size > len(content):
+        response._content = content + (b"\0" * (expected_size - len(content)))
+    elif expected_size < len(content):
+        response._content = content[:expected_size]
+    response.headers["Content-Length"] = str(expected_size)
+    return response
 
 
 # TypeVar to parameterize for specific types
@@ -359,7 +417,24 @@ def run_icloudpd_test(
         cookie_dir,
     ] + params
 
-    result = with_cassette_main_runner(combined_params)
+    original_download = PhotoAsset.download
+
+    def download_with_complete_fixture_payload(
+        self: PhotoAsset, session: Any, url: str, start: int
+    ) -> Any:
+        response = original_download(self, session, url, start)
+        if not isinstance(response, Response):
+            return response
+        # Legacy VCR cassettes store placeholder bodies but iCloud metadata
+        # advertises full media sizes. Non-truncation tests should exercise the
+        # normal complete-download path without weakening production validation.
+        return normalize_fixture_response_for_asset(response, self, url, start)
+
+    if isinstance(original_download, mock.Mock):
+        result = with_cassette_main_runner(combined_params)
+    else:
+        with mock.patch.object(PhotoAsset, "download", new=download_with_complete_fixture_payload):
+            result = with_cassette_main_runner(combined_params)
     files_to_assert = combine_file_lists(files_to_create, files_to_download)
     assert_files(assert_equal, data_dir, files_to_assert)
 

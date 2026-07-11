@@ -694,6 +694,45 @@ class PyiCloudService:
 
         return parse_trusted_phone_numbers_response(response)
 
+    def trigger_push_notification(self) -> bool:
+        """Triggers a push notification to trusted devices for 2FA code entry.
+
+        Sends PUT to /verify/trusteddevice/securitycode (no body). Apple's new
+        auth flow (2026+) uses this endpoint to push a code to trusted devices.
+        """
+        headers = self._get_auth_headers({"Accept": "application/json"})
+        try:
+            if self.response_observer:
+                rules = list(
+                    chain(
+                        self.cookie_obfuscate_rules,
+                        self.header_obfuscate_rules,
+                        self.header_pass_rules,
+                        self.header_drop_rules,
+                    )
+                )
+            else:
+                rules = []
+
+            with self.use_rules(rules):
+                response = self.session.put(
+                    f"{self.AUTH_ENDPOINT}/verify/trusteddevice/securitycode",
+                    headers=headers,
+                )
+            response_ok = getattr(response, "ok", None)
+            status_code = getattr(response, "status_code", None)
+            if response_ok is None and status_code is not None:
+                response_ok = 200 <= status_code < 300
+            if not response_ok:
+                LOGGER.warning(
+                    "Apple trusted-device push request failed with status %s",
+                    status_code or "unknown",
+                )
+                return False
+            return True
+        except PyiCloudAPIResponseException:
+            return False
+
     def send_2fa_code_sms(self, device_id: int) -> bool:
         """Requests that a verification code is sent to the given device"""
 

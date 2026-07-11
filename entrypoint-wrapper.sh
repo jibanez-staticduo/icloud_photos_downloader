@@ -100,6 +100,19 @@ elif [ -n "$RECENT_ONLY" ] && [ "$RECENT_ONLY" != "0" ]; then
     ARGS="$ARGS --recent $RECENT_ONLY"
 fi
 
+# Repair truncated local downloads. Modes: off, audit, replace.
+if [ -n "$repair_truncated_downloads" ]; then
+    ARGS="$ARGS --repair-truncated-downloads $repair_truncated_downloads"
+elif [ -n "$REPAIR_TRUNCATED_DOWNLOADS" ]; then
+    ARGS="$ARGS --repair-truncated-downloads $REPAIR_TRUNCATED_DOWNLOADS"
+fi
+
+if [ -n "$repair_quarantine_directory" ]; then
+    ARGS="$ARGS --repair-quarantine-directory $repair_quarantine_directory"
+elif [ -n "$REPAIR_QUARANTINE_DIRECTORY" ]; then
+    ARGS="$ARGS --repair-quarantine-directory $REPAIR_QUARANTINE_DIRECTORY"
+fi
+
 # Library
 if [ -n "$photo_library" ]; then
     ARGS="$ARGS --library $photo_library"

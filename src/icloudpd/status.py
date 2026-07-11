@@ -32,6 +32,7 @@ class StatusExchange:
         self._force_full_sync = False
         self._manual_sync = False  # True if sync was triggered manually
         self._auth_mode_requested = False
+        self._auth_restart_requested = False
         self._auth_notification_sent = False
 
     def get_status(self) -> Status:
@@ -145,7 +146,26 @@ class StatusExchange:
     def request_auth_mode(self) -> None:
         with self.lock:
             self._auth_mode_requested = True
+            self._auth_restart_requested = True
             self._auth_notification_sent = False
+            if self._status in [Status.NEED_MFA, Status.SUPPLIED_MFA]:
+                self._payload = None
+                self._error = None
+                self._status = Status.NO_INPUT_NEEDED
+
+    def auth_restart_requested(self) -> bool:
+        with self.lock:
+            return self._auth_restart_requested
+
+    def consume_auth_restart_request(self) -> bool:
+        with self.lock:
+            requested = self._auth_restart_requested
+            self._auth_restart_requested = False
+            return requested
+
+    def clear_auth_restart_request(self) -> None:
+        with self.lock:
+            self._auth_restart_requested = False
 
     def consume_auth_mode_request(self) -> bool:
         with self.lock:

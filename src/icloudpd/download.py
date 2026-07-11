@@ -4,7 +4,9 @@ import base64
 import datetime
 import logging
 import os
+import shutil
 import time
+import uuid
 from functools import partial
 from typing import Callable
 
@@ -87,6 +89,69 @@ def download_response_to_path(
     return True
 
 
+def _unique_invalid_download_path(temp_download_path: str, suffix: str) -> str:
+    base, ext = os.path.splitext(temp_download_path)
+    return f"{base}.{suffix}.{uuid.uuid4().hex}{ext}"
+
+
+def _expected_version_size(version: AssetVersion) -> int | None:
+    size = getattr(version, "size", None)
+    return size if isinstance(size, int) and size >= 0 else None
+
+
+def _write_response_content(response: Response, temp_download_path: str, append_mode: bool) -> None:
+    with open(temp_download_path, ("ab" if append_mode else "wb")) as file_obj:
+        for chunk in response.iter_content(chunk_size=1024):
+            if chunk:
+                file_obj.write(chunk)
+
+
+def finalize_download_path(
+    logger: logging.Logger,
+    temp_download_path: str,
+    download_path: str,
+    version: AssetVersion,
+    created_date: datetime.datetime,
+    dry_run: bool,
+    incomplete_observer: Callable[[], None] | None = None,
+) -> bool:
+    """Promote a completed temp file only when size matches expected metadata."""
+    if dry_run:
+        return download_response_to_path_dry_run(
+            logger, None, temp_download_path, False, download_path, created_date
+        )
+
+    expected_size = _expected_version_size(version)
+    temp_size = os.path.getsize(temp_download_path)
+    if expected_size is not None and temp_size != expected_size:
+        if temp_size < expected_size:
+            logger.warning(
+                "Downloaded temp file %s is truncated (%s < %s); keeping .part for resume",
+                temp_download_path,
+                temp_size,
+                expected_size,
+            )
+            if incomplete_observer:
+                incomplete_observer()
+            return False
+        logger.error(
+            "Downloaded temp file %s is larger than expected (%s > %s)",
+            temp_download_path,
+            temp_size,
+            expected_size,
+        )
+        invalid_path = _unique_invalid_download_path(temp_download_path, "oversize")
+        shutil.move(temp_download_path, invalid_path)
+        logger.error("Moved invalid temp file aside to %s", invalid_path)
+        if incomplete_observer:
+            incomplete_observer()
+        return False
+
+    os.rename(temp_download_path, download_path)
+    update_mtime(created_date, download_path)
+    return True
+
+
 def download_response_to_path_dry_run(
     logger: logging.Logger,
     _response: Response,
@@ -112,6 +177,7 @@ def download_media(
     version: AssetVersion,
     size: VersionSize,
     filename_builder: Callable[[PhotoAsset], str],
+    incomplete_observer: Callable[[], None] | None = None,
 ) -> bool:
     """Download the photo to path, with retries and error handling"""
 
@@ -133,13 +199,37 @@ def download_media(
         try:
             append_mode = os.path.exists(temp_download_path)
             current_size = os.path.getsize(temp_download_path) if append_mode else 0
+            expected_size = _expected_version_size(version)
+            if expected_size is not None and current_size > expected_size:
+                invalid_path = _unique_invalid_download_path(temp_download_path, "oversize")
+                shutil.move(temp_download_path, invalid_path)
+                logger.error(
+                    "Existing temp file %s is larger than expected (%s > %s); moved aside to %s",
+                    temp_download_path,
+                    current_size,
+                    expected_size,
+                    invalid_path,
+                )
+                append_mode = False
+                current_size = 0
             if append_mode:
-                logger.debug(f"Resuming downloading of {download_path} from {current_size}")
+                logger.info(f"Resuming downloading of {download_path} from {current_size}")
 
             photo_response = photo.download(icloud.photos.session, version.url, current_size)
             if photo_response.ok:
-                return download_local(
-                    photo_response, temp_download_path, append_mode, download_path, photo.created
+                if dry_run:
+                    return download_local(
+                        photo_response, temp_download_path, append_mode, download_path, photo.created
+                    )
+                _write_response_content(photo_response, temp_download_path, append_mode)
+                return finalize_download_path(
+                    logger,
+                    temp_download_path,
+                    download_path,
+                    version,
+                    photo.created,
+                    dry_run,
+                    incomplete_observer,
                 )
             else:
                 # Use the standard original filename generator for error logging

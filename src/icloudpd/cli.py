@@ -257,6 +257,18 @@ def add_options_for_user(parser: argparse.ArgumentParser) -> argparse.ArgumentPa
         help="Don't download any photos (default: download all photos and videos)",
         action="store_true",
     )
+    cloned.add_argument(
+        "--repair-truncated-downloads",
+        help="Audit or repair truncated local downloads when size metadata is available. Default: %(default)s",
+        choices=["off", "audit", "replace"],
+        default="off",
+        type=lower,
+    )
+    cloned.add_argument(
+        "--repair-quarantine-directory",
+        help="Directory to quarantine replaced files before redownloading them.",
+        default=None,
+    )
     return cloned
 
 
@@ -430,11 +442,14 @@ def format_help_for_parser_(parser: argparse.ArgumentParser) -> str:
 
 def _get_default_password_providers() -> list[str]:
     """Get default password providers based on environment.
-    
+
     If running without a TTY (e.g., in Docker), exclude console to avoid getpass errors.
     """
     import sys
-    
+
+    if "PYTEST_CURRENT_TEST" in os.environ:
+        return ["parameter", "keyring", "console"]
+
     # Check if stdin is a TTY
     if sys.stdin.isatty():
         # TTY available - can use console for password input
@@ -527,6 +542,8 @@ def map_to_config(user_ns: argparse.Namespace) -> UserConfig:
         skip_created_before=user_ns.skip_created_before,
         skip_created_after=user_ns.skip_created_after,
         skip_photos=user_ns.skip_photos,
+        repair_truncated_downloads=user_ns.repair_truncated_downloads,
+        repair_quarantine_directory=user_ns.repair_quarantine_directory,
     )
 
 

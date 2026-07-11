@@ -235,6 +235,8 @@ class CliTestCase(TestCase):
                         skip_created_before=None,
                         skip_created_after=None,
                         skip_photos=False,
+                        repair_truncated_downloads="off",
+                        repair_quarantine_directory=None,
                     ),
                     UserConfig(
                         directory="def",
@@ -275,6 +277,8 @@ class CliTestCase(TestCase):
                         skip_created_before=None,
                         skip_created_after=None,
                         skip_photos=False,
+                        repair_truncated_downloads="off",
+                        repair_quarantine_directory=None,
                     ),
                 ],
             ),
@@ -353,6 +357,8 @@ class CliTestCase(TestCase):
                         ),
                         skip_created_after=datetime.timedelta(days=2),
                         skip_photos=False,
+                        repair_truncated_downloads="off",
+                        repair_quarantine_directory=None,
                     ),
                 ],
             ),
@@ -390,6 +396,26 @@ class CliTestCase(TestCase):
                     "2",
                 ]
             )
+
+    def test_cli_parser_repair_truncated_downloads(self) -> None:
+        _global_config, user_configs = parse(
+            [
+                "-d",
+                "abc",
+                "--repair-truncated-downloads",
+                "replace",
+                "--repair-quarantine-directory",
+                "/tmp/icloudpd-quarantine",
+                "--username",
+                "u1",
+            ]
+        )
+
+        self.assertEqual(user_configs[0].repair_truncated_downloads, "replace")
+        self.assertEqual(
+            user_configs[0].repair_quarantine_directory,
+            "/tmp/icloudpd-quarantine",
+        )
 
     def test_cli(self) -> None:
         result = run_main(["--help"])

@@ -147,7 +147,7 @@ jobs:
     - name: Run version
       uses: addnab/docker-run-action@v3
       with:
-        image: python:3.13-alpine3.19
+        image: python:3.13-alpine3.23
         shell: sh
         options: -v ${{ github.workspace }}:/work 
         run: >

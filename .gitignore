@@ -31,3 +31,14 @@ node_modules/
 *.code-workspace
 pr_preparation/
 src/icloudpd/telegram_bot.py.backup
+
+# StaticEng local/private state
+.staticeng/.config/
+.staticeng/**/.env
+.staticeng/**/.env.*
+.staticeng/**/*.env
+.staticeng/**/*secret*
+.staticeng/**/*secrets*
+.staticeng/**/*token*
+.staticeng/**/*credential*
+.staticeng/**/*credentials*
